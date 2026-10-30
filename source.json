@@ -20,6 +20,15 @@
       "screenshotURLs": [],
       "versions": [
         {
+          "version": "1.0.0.2",
+          "buildVersion": "2",
+          "date": "2026-10-30T19:12:54Z",
+          "localizedDescription": "- Router plugin: stop deadlocking rpcd (iwinfo CLI instead of ubus iwinfo), POSIX-safe regexes; clearer timeout errors (73e3378)\n- Router plugin: list guest firewall sections by type (27dadcd)",
+          "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-2/Switchyard-1.0.0-build-2.ipa",
+          "size": 682374,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "1.0.0.1",
           "buildVersion": "1",
           "date": "2026-10-30T17:59:55Z",
@@ -29,11 +38,11 @@
           "minOSVersion": "17.0"
         }
       ],
-      "version": "1.0.0.1",
-      "versionDate": "2026-10-30T17:59:55Z",
-      "versionDescription": "- Switchyard: ASUS (OpenWrt) and TP-Link control in one app, plus the router plugin (d325c5b)\n- Initial commit (95755ea)",
-      "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-1/Switchyard-1.0.0-build-1.ipa",
-      "size": 681923,
+      "version": "1.0.0.2",
+      "versionDate": "2026-10-30T19:12:54Z",
+      "versionDescription": "- Router plugin: stop deadlocking rpcd (iwinfo CLI instead of ubus iwinfo), POSIX-safe regexes; clearer timeout errors (73e3378)\n- Router plugin: list guest firewall sections by type (27dadcd)",
+      "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-2/Switchyard-1.0.0-build-2.ipa",
+      "size": 682374,
       "appPermissions": {}
     }
   ],
