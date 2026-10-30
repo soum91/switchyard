@@ -5,6 +5,8 @@ struct RouterDashboard: View {
     @ObservedObject var model: RouterModel
     var title: String = "Router"
     var onForget: (() -> Void)?
+    /// Extra content under the quick switches (Keystone adds its bridge-only options here).
+    var extra: AnyView? = nil
 
     var body: some View {
         ScrollView {
@@ -16,6 +18,7 @@ struct RouterDashboard: View {
                     overview(s)
                     internet(s)
                     switches(s)
+                    if let extra { extra }
                     pages(s)
                 } else if model.error == nil {
                     ProgressView().padding(.top, 60)
