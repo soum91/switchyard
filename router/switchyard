@@ -471,10 +471,11 @@ function removeGuest(c) {
 	if (c.get('dhcp', GUEST))
 		c.delete('dhcp', GUEST);
 	let fw = [];
-	c.foreach('firewall', null, function(s) {
-		if (substr(s['.name'], 0, length(GUEST)) == GUEST)
-			push(fw, s['.name']);
-	});
+	for (let t in [ 'zone', 'forwarding', 'rule' ])
+		c.foreach('firewall', t, function(s) {
+			if (substr(s['.name'], 0, length(GUEST)) == GUEST)
+				push(fw, s['.name']);
+		});
 	for (let i = 0; i < length(fw); i++)
 		c.delete('firewall', fw[i]);
 	let wl = [];
