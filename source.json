@@ -1,0 +1,41 @@
+{
+  "name": "Switchyard by soum91",
+  "identifier": "io.github.soum91.switchyard",
+  "subtitle": "Your OpenWrt ASUS and TP-Link in one app",
+  "description": "Runs the OpenWrt ASUS router and the TP-Link Archer from one place: live speed, devices (kick and block), ad blocking and your own blocked sites, the WARP tunnel, Wi-Fi and guest network, light schedule, drop log, diagnostics and reboot.",
+  "iconURL": "https://raw.githubusercontent.com/soum91/switchyard/main/Switchyard/Assets.xcassets/AppIcon.appiconset/icon.png",
+  "website": "https://github.com/soum91/switchyard",
+  "sourceURL": "https://raw.githubusercontent.com/soum91/switchyard/source/source.json",
+  "tintColor": "3DE08F",
+  "apps": [
+    {
+      "name": "Switchyard",
+      "bundleIdentifier": "com.soum91.switchyard",
+      "developerName": "soum91",
+      "subtitle": "Your OpenWrt ASUS and TP-Link in one app",
+      "localizedDescription": "Runs the OpenWrt ASUS router and the TP-Link Archer from one place: live speed, devices (kick and block), ad blocking and your own blocked sites, the WARP tunnel, Wi-Fi and guest network, light schedule, drop log, diagnostics and reboot.",
+      "iconURL": "https://raw.githubusercontent.com/soum91/switchyard/main/Switchyard/Assets.xcassets/AppIcon.appiconset/icon.png",
+      "tintColor": "3DE08F",
+      "category": "utilities",
+      "screenshotURLs": [],
+      "versions": [
+        {
+          "version": "1.0.0.1",
+          "buildVersion": "1",
+          "date": "2026-10-30T17:59:55Z",
+          "localizedDescription": "- Switchyard: ASUS (OpenWrt) and TP-Link control in one app, plus the router plugin (d325c5b)\n- Initial commit (95755ea)",
+          "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-1/Switchyard-1.0.0-build-1.ipa",
+          "size": 681923,
+          "minOSVersion": "17.0"
+        }
+      ],
+      "version": "1.0.0.1",
+      "versionDate": "2026-10-30T17:59:55Z",
+      "versionDescription": "- Switchyard: ASUS (OpenWrt) and TP-Link control in one app, plus the router plugin (d325c5b)\n- Initial commit (95755ea)",
+      "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-1/Switchyard-1.0.0-build-1.ipa",
+      "size": 681923,
+      "appPermissions": {}
+    }
+  ],
+  "news": []
+}
