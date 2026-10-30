@@ -43,8 +43,10 @@ final class UbusClient {
         let resp: URLResponse
         do {
             (data, resp) = try await URLSession.shared.data(for: req)
+        } catch let e as URLError where e.code == .timedOut {
+            throw RouterError.message("The router at \(host) is answering too slowly. If it stays like this, reboot it.")
         } catch {
-            throw RouterError.message("Can't reach the router at \(host). Are you on its Wi-Fi?")
+            throw RouterError.message("Can't reach the router at \(host). Are you on its Wi-Fi? (\(error.localizedDescription))")
         }
         if (resp as? HTTPURLResponse)?.statusCode == 404 {
             throw RouterError.message("The router has no /ubus endpoint. Run the Switchyard install command on it, it turns that on.")

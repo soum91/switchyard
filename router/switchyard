@@ -166,12 +166,83 @@ function wgHandshakeAge(dev) {
 	let best = 0;
 	let ls = lines(out);
 	for (let i = 0; i < length(ls); i++) {
-		let f = split(trim(ls[i]), /\s+/);
+		let f = split(trim(ls[i]), /[[:space:]]+/);
 		let t = num(f[length(f) - 1]);
 		if (t > best)
 			best = t;
 	}
 	return best > 0 ? time() - best : -1;
+}
+
+// iwinfo is served by rpcd itself, so "ubus call iwinfo" from inside this plugin deadlocks rpcd.
+// Use the iwinfo command line tool instead (it talks to the driver directly).
+function iwInfo(dev) {
+	let out = sh('iwinfo ' + shq(dev) + ' info 2>/dev/null');
+	if (!length(out))
+		return null;
+	let r = {};
+	let m = match(out, /ESSID: "([^"]*)"/);
+	if (m)
+		r.ssid = m[1];
+	m = match(out, /Signal: (-?[0-9]+) dBm/);
+	if (m)
+		r.signal = num(m[1]);
+	m = match(out, /Bit Rate: ([0-9.]+) MBit/);
+	if (m)
+		r.bitrate = +m[1] * 1000;
+	m = match(out, /Channel: ([0-9]+)/);
+	if (m)
+		r.channel = num(m[1]);
+	return r;
+}
+
+function iwAssoc(dev) {
+	let out = [];
+	let cur = null;
+	let ls = lines(sh('iwinfo ' + shq(dev) + ' assoclist 2>/dev/null'));
+	for (let i = 0; i < length(ls); i++) {
+		let m = match(ls[i], /^([0-9A-Fa-f:]{17})[[:space:]]+(-?[0-9]+) dBm.* ([0-9]+) ms ago/);
+		if (m) {
+			cur = { mac: m[1], signal: num(m[2]), inactive: num(m[3]) };
+			push(out, cur);
+			continue;
+		}
+		if (!cur)
+			continue;
+		m = match(ls[i], /RX: ([0-9.]+) MBit/);
+		if (m)
+			cur.rx = { rate: +m[1] * 1000 };
+		m = match(ls[i], /TX: ([0-9.]+) MBit/);
+		if (m)
+			cur.tx = { rate: +m[1] * 1000 };
+	}
+	return out;
+}
+
+function iwScan(dev) {
+	let out = [];
+	let cur = null;
+	let ls = lines(sh('iwinfo ' + shq(dev) + ' scan 2>/dev/null'));
+	for (let i = 0; i < length(ls); i++) {
+		let m = match(ls[i], /Address: ([0-9A-Fa-f:]{17})/);
+		if (m) {
+			cur = { bssid: m[1] };
+			push(out, cur);
+			continue;
+		}
+		if (!cur)
+			continue;
+		m = match(ls[i], /ESSID: "([^"]*)"/);
+		if (m)
+			cur.ssid = m[1];
+		m = match(ls[i], /Channel: ([0-9]+)/);
+		if (m)
+			cur.channel = num(m[1]);
+		m = match(ls[i], /Signal: (-?[0-9]+) dBm/);
+		if (m)
+			cur.signal = num(m[1]);
+	}
+	return out;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -266,7 +337,7 @@ function ledSchedule() {
 		let l = trim(ls[i]);
 		if (substr(l, 0, 1) == '#' || !isLedLine(l))
 			continue;
-		let f = split(l, /\s+/);
+		let f = split(l, /[[:space:]]+/);
 		if (length(f) < 6)
 			continue;
 		let off = index(l, 'none') >= 0 || index(l, '"on":false') >= 0;
@@ -387,8 +458,7 @@ function clientList(c) {
 	for (let i = 0; i < length(ifs); i++) {
 		if (ifs[i].mode != 'ap' || !ifs[i].ifname)
 			continue;
-		let a = js("ubus call iwinfo assoclist '{\"device\":\"" + ifs[i].ifname + "\"}'");
-		let res = (a && a.results) ? a.results : [];
+		let res = iwAssoc(ifs[i].ifname);
 		for (let k = 0; k < length(res); k++) {
 			let x = get(lc(res[k].mac));
 			x.b = ifs[i].band || 'wifi';
@@ -404,7 +474,7 @@ function clientList(c) {
 
 	let neigh = lines(sh('ip -4 neigh show'));
 	for (let i = 0; i < length(neigh); i++) {
-		let m = match(neigh[i], /^([0-9.]+) dev (\S+) lladdr ([0-9a-fA-F:]+) (.*)$/);
+		let m = match(neigh[i], /^([0-9.]+) dev ([^ ]+) lladdr ([0-9a-fA-F:]+) (.*)$/);
 		if (!m || substr(m[2], 0, 3) != 'br-')
 			continue;
 		if (match(m[4], /FAILED|INCOMPLETE/))
@@ -568,7 +638,7 @@ function status() {
 	};
 
 	if (up) {
-		let w = js("ubus call iwinfo info '{\"device\":\"" + up.dev + "\"}'");
+		let w = iwInfo(up.dev);
 		if (w) {
 			up.ssid = w.ssid;
 			up.signal = w.signal;
@@ -601,7 +671,7 @@ function status() {
 
 	let df = lines(sh('df -k /overlay 2>/dev/null'));
 	if (length(df) > 1) {
-		let f = split(trim(df[1]), /\s+/);
+		let f = split(trim(df[1]), /[[:space:]]+/);
 		res.storage = { total: num(f[1]), free: num(f[3]) };
 	}
 	return res;
@@ -621,7 +691,7 @@ function wifiConfig() {
 			if (live[i].mode == 'sta')
 				sta = true;
 			if (ch == null && live[i].ifname) {
-				let w = js("ubus call iwinfo info '{\"device\":\"" + live[i].ifname + "\"}'");
+				let w = iwInfo(live[i].ifname);
 				if (w && w.channel)
 					ch = w.channel;
 			}
@@ -968,8 +1038,7 @@ function scan(a) {
 			dev = ifs[i].ifname;
 	if (!dev)
 		return err('That radio has no active network to scan with.');
-	let r = js("ubus call iwinfo scan '{\"device\":\"" + dev + "\"}'");
-	let res = (r && r.results) ? r.results : [];
+	let res = iwScan(dev);
 	let out = [];
 	for (let i = 0; i < length(res); i++)
 		push(out, { s: res[i].ssid, c: res[i].channel, g: res[i].signal, b: res[i].bssid });
