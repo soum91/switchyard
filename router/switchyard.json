@@ -1,0 +1,15 @@
+{
+	"switchyard": {
+		"description": "Switchyard and Keystone router control",
+		"read": {
+			"ubus": {
+				"switchyard": [ "*" ]
+			}
+		},
+		"write": {
+			"ubus": {
+				"switchyard": [ "*" ]
+			}
+		}
+	}
+}

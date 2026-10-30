@@ -1,0 +1,13 @@
+{
+  "name": "Switchyard",
+  "sourceName": "Switchyard by soum91",
+  "sourceIdentifier": "io.github.soum91.switchyard",
+  "subtitle": "Your OpenWrt ASUS and TP-Link in one app",
+  "description": "Runs the OpenWrt ASUS router and the TP-Link Archer from one place: live speed, devices (kick and block), ad blocking and your own blocked sites, the WARP tunnel, Wi-Fi and guest network, light schedule, drop log, diagnostics and reboot.",
+  "developerName": "soum91",
+  "iconURL": "https://raw.githubusercontent.com/soum91/switchyard/main/Switchyard/Assets.xcassets/AppIcon.appiconset/icon.png",
+  "tintColor": "3DE08F",
+  "category": "utilities",
+  "website": "https://github.com/soum91/switchyard",
+  "sourceURL": "https://raw.githubusercontent.com/soum91/switchyard/source/source.json"
+}

@@ -1,0 +1,120 @@
+name: Build unsigned IPA
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["router/**", "**.md"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  APP: Switchyard
+  BUILD: ${{ github.run_number }}
+  TAG: build-${{ github.run_number }}
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.4.app || true
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate project
+        run: xcodegen generate
+
+      - name: Build
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project Switchyard.xcodeproj \
+            -scheme Switchyard \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            CURRENT_PROJECT_VERSION=$BUILD \
+            build | tee build.log | grep -E "error:|warning: unre|BUILD (SUCCEEDED|FAILED)" || true
+          test -d build/Build/Products/Release-iphoneos/Switchyard.app
+
+      - name: Publish build log
+        if: always()
+        run: |
+          git config user.name "ci"
+          git config user.email "ci@users.noreply.github.com"
+          grep -E "error:|warning:" build.log | sort -u > ci-errors.log || true
+          tail -n 300 build.log >> ci-errors.log 2>/dev/null || echo "no build.log" >> ci-errors.log
+          git stash -u -q || true
+          git checkout -q -B ci-logs-ios
+          git stash pop -q || true
+          git add -f ci-errors.log
+          git commit -qm "iOS CI log for ${GITHUB_SHA}" || true
+          git push -qf origin ci-logs-ios
+          git checkout -q -f "$GITHUB_SHA"
+
+      - name: Package IPA
+        run: |
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/Switchyard.app Payload/
+          # Stamp the build number into the app and widget before signing.
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD" Payload/Switchyard.app/Info.plist
+          VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" Payload/Switchyard.app/Info.plist)
+          # Sideloaders (FlareStore etc.) only compare the version string, so make it <version>.<build>.
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION.$BUILD" Payload/Switchyard.app/Info.plist
+          codesign --force --sign - --timestamp=none Payload/Switchyard.app
+          IPA="$APP-$VERSION-build-$BUILD.ipa"
+          zip -qr "$IPA" Payload
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "IPA=$IPA" >> "$GITHUB_ENV"
+
+      - name: Changelog
+        run: |
+          .github/scripts/release-notes.sh "$APP" "$VERSION" "$BUILD" 'build-*' "$TAG" \
+            "Unsigned IPA. Sideload with AltStore, SideStore, FlareStore or Sideloadly." > release-notes.md
+          cat release-notes.md
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APP }}-build-${{ env.BUILD }}-ipa
+          path: ${{ env.IPA }}
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          target_commitish: ${{ github.sha }}
+          name: Switchyard ${{ env.VERSION }} build ${{ env.BUILD }}
+          body_path: release-notes.md
+          files: ${{ env.IPA }}
+          make_latest: true
+
+      - name: Update sideloading source (FlareStore / AltStore / SideStore)
+        run: |
+          git config user.name "ci"
+          git config user.email "ci@users.noreply.github.com"
+          URL="https://github.com/${{ github.repository }}/releases/download/$TAG/$IPA"
+          for attempt in 1 2 3; do
+            rm -rf "$RUNNER_TEMP/source"
+            if git fetch -q origin source; then
+              git worktree add -q -f --detach "$RUNNER_TEMP/source" FETCH_HEAD
+            else
+              git worktree add -q -f --detach "$RUNNER_TEMP/source"
+              git -C "$RUNNER_TEMP/source" checkout -q --orphan source
+              git -C "$RUNNER_TEMP/source" rm -rqf .
+            fi
+            python3 .github/scripts/update-source.py "$RUNNER_TEMP/source/source.json" "$IPA" "$URL" "release-notes.md"
+            git -C "$RUNNER_TEMP/source" add source.json
+            git -C "$RUNNER_TEMP/source" commit -qm "Source: $APP build $BUILD"
+            git -C "$RUNNER_TEMP/source" push -q origin HEAD:refs/heads/source && break
+            git worktree remove -f "$RUNNER_TEMP/source"
+            sleep 5
+          done

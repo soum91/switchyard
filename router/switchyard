@@ -1,0 +1,1144 @@
+// Switchyard: one ubus object ("switchyard") that the Switchyard and Keystone apps use to run the router.
+// rpcd loads it from /usr/share/rpcd/ucode/. Every method returns an object; failures come back as
+// { error: "..." } so the apps can show the reason.
+'use strict';
+
+import { readfile, writefile, popen, lsdir, access, unlink, rename, mkdir } from 'fs';
+import { cursor } from 'uci';
+
+const VERSION = 1;
+const LED_DIR = '/sys/class/leds';
+const NETWATCH = '/tmp/netwatch.log';
+const MAC_RE = /^([0-9a-f]{2}:){5}[0-9a-f]{2}$/;
+const IP_RE = /^([0-9]{1,3}\.){3}[0-9]{1,3}$/;
+const TIME_RE = /^([01]?[0-9]|2[0-3]):([0-5][0-9])$/;
+const DOMAIN_RE = /^[a-z0-9_]([a-z0-9_-]*[a-z0-9])?(\.[a-z0-9_]([a-z0-9_-]*[a-z0-9])?)+$/;
+const GUEST = 'syguest';
+const GUEST_IP = '192.168.9.1';
+
+// ---------------------------------------------------------------------------------------------
+// helpers
+
+function sh(cmd) {
+	let p = popen(cmd, 'r');
+	if (!p)
+		return '';
+	let out = p.read('all');
+	p.close();
+	return out ? out : '';
+}
+
+function js(cmd) {
+	let s = sh(cmd);
+	if (!length(trim(s)))
+		return null;
+	try {
+		return json(s);
+	}
+	catch (e) {
+		return null;
+	}
+}
+
+function bg(cmd) {
+	system('(' + cmd + ') >/dev/null 2>&1 </dev/null &');
+}
+
+function lines(s) {
+	let out = [];
+	if (!s)
+		return out;
+	let parts = split(s, '\n');
+	for (let i = 0; i < length(parts); i++)
+		if (length(trim(parts[i])))
+			push(out, parts[i]);
+	return out;
+}
+
+function tail(arr, n) {
+	return length(arr) > n ? slice(arr, length(arr) - n) : arr;
+}
+
+function num(s) {
+	let v = int(trim('' + s));
+	return v == null || v != v ? 0 : v;
+}
+
+function asList(v) {
+	if (v == null)
+		return [];
+	return type(v) == 'array' ? v : [ v ];
+}
+
+function shq(s) {
+	return "'" + replace('' + s, /'/g, "'\\''") + "'";
+}
+
+function err(msg) {
+	return { error: msg };
+}
+
+function readTrim(path) {
+	let s = readfile(path);
+	return s ? trim(s) : null;
+}
+
+// ---------------------------------------------------------------------------------------------
+// network facts
+
+function ifaceDump() {
+	let d = js('ubus call network.interface dump');
+	return (d && d.interface) ? d.interface : [];
+}
+
+// The interface carrying the internet (not the WARP tunnel).
+function upstream(dump) {
+	for (let i = 0; i < length(dump); i++) {
+		let it = dump[i];
+		if (!it.up || it.proto == 'wireguard')
+			continue;
+		let routes = it.route || [];
+		for (let r = 0; r < length(routes); r++) {
+			if (routes[r].target == '0.0.0.0' && routes[r].mask == 0) {
+				let a = it['ipv4-address'] || [];
+				return {
+					iface: it.interface,
+					dev: it.l3_device || it.device,
+					ip: length(a) ? a[0].address : null,
+					mask: length(a) ? a[0].mask : null,
+					gw: routes[r].nexthop
+				};
+			}
+		}
+	}
+	return null;
+}
+
+function lanInfo(dump) {
+	for (let i = 0; i < length(dump); i++)
+		if (dump[i].interface == 'lan') {
+			let a = dump[i]['ipv4-address'] || [];
+			return { ip: length(a) ? a[0].address : null, mask: length(a) ? a[0].mask : null };
+		}
+	return null;
+}
+
+function warpIface(c) {
+	let name = null;
+	c.foreach('network', 'interface', function(s) {
+		if (!name && s.proto == 'wireguard')
+			name = s['.name'];
+	});
+	return name;
+}
+
+function wirelessStatus() {
+	let w = js('ubus call network.wireless status');
+	return w ? w : {};
+}
+
+// [{ ifname, section, radio, band, mode, ssid, guest }]
+function wifiIfaces(ws) {
+	let out = [];
+	for (let radio in ws) {
+		let r = ws[radio];
+		let band = (r.config && r.config.band) ? r.config.band : '';
+		let ifs = r.interfaces || [];
+		for (let i = 0; i < length(ifs); i++) {
+			let cfg = ifs[i].config || {};
+			let nets = asList(cfg.network);
+			push(out, {
+				ifname: ifs[i].ifname,
+				section: ifs[i].section,
+				radio: radio,
+				band: band,
+				mode: cfg.mode,
+				ssid: cfg.ssid,
+				guest: index(nets, GUEST) >= 0
+			});
+		}
+	}
+	return out;
+}
+
+function wgHandshakeAge(dev) {
+	let out = sh('wg show ' + shq(dev) + ' latest-handshakes 2>/dev/null');
+	let best = 0;
+	let ls = lines(out);
+	for (let i = 0; i < length(ls); i++) {
+		let f = split(trim(ls[i]), /\s+/);
+		let t = num(f[length(f) - 1]);
+		if (t > best)
+			best = t;
+	}
+	return best > 0 ? time() - best : -1;
+}
+
+// ---------------------------------------------------------------------------------------------
+// LEDs
+
+function ledNames() {
+	let out = [];
+	let all = lsdir(LED_DIR) || [];
+	for (let i = 0; i < length(all); i++)
+		if (substr(all[i], 0, 4) != 'mt76')
+			push(out, all[i]);
+	return sort(out);
+}
+
+function ledTrigger(name) {
+	let s = readfile(LED_DIR + '/' + name + '/trigger');
+	let m = s ? match(s, /\[([^\]]+)\]/) : null;
+	return m ? m[1] : null;
+}
+
+function ledsOff() {
+	let names = ledNames();
+	if (!length(names))
+		return false;
+	for (let i = 0; i < length(names); i++)
+		if (ledTrigger(names[i]) != 'none')
+			return false;
+	return true;
+}
+
+function setLeds(on) {
+	let names = ledNames();
+	let saved = {};
+	let s = readfile('/tmp/switchyard-leds');
+	if (s) {
+		let ls = lines(s);
+		for (let i = 0; i < length(ls); i++) {
+			let f = split(ls[i], ' ');
+			if (length(f) == 2)
+				saved[f[0]] = f[1];
+		}
+	}
+	if (!on) {
+		let keep = '';
+		for (let i = 0; i < length(names); i++) {
+			let t = ledTrigger(names[i]);
+			if (t && t != 'none')
+				keep += names[i] + ' ' + t + '\n';
+			else if (saved[names[i]])
+				keep += names[i] + ' ' + saved[names[i]] + '\n';
+		}
+		writefile('/tmp/switchyard-leds', keep);
+	}
+	for (let i = 0; i < length(names); i++) {
+		let t = on ? (saved[names[i]] && saved[names[i]] != 'none' ? saved[names[i]] : 'default-on') : 'none';
+		writefile(LED_DIR + '/' + names[i] + '/trigger', t);
+		if (!on)
+			writefile(LED_DIR + '/' + names[i] + '/brightness', '0');
+	}
+	return { ok: true, off: ledsOff() };
+}
+
+// ---------------------------------------------------------------------------------------------
+// cron
+
+function crontab() {
+	let s = readfile('/etc/crontabs/root');
+	return s ? split(s, '\n') : [];
+}
+
+function writeCrontab(ls) {
+	let keep = [];
+	for (let i = 0; i < length(ls); i++)
+		if (length(trim(ls[i])))
+			push(keep, ls[i]);
+	writefile('/etc/crontabs/root', join('\n', keep) + '\n');
+	system('/etc/init.d/cron restart >/dev/null 2>&1');
+}
+
+function isLedLine(l) {
+	return index(l, '/sys/class/leds') >= 0 || index(l, 'switchyard leds') >= 0;
+}
+
+function hhmm(min, hour) {
+	return sprintf('%02d:%02d', num(hour), num(min));
+}
+
+function ledSchedule() {
+	let out = { on: false, offAt: null, onAt: null };
+	let ls = crontab();
+	for (let i = 0; i < length(ls); i++) {
+		let l = trim(ls[i]);
+		if (substr(l, 0, 1) == '#' || !isLedLine(l))
+			continue;
+		let f = split(l, /\s+/);
+		if (length(f) < 6)
+			continue;
+		let off = index(l, 'none') >= 0 || index(l, '"on":false') >= 0;
+		if (off)
+			out.offAt = hhmm(f[0], f[1]);
+		else
+			out.onAt = hhmm(f[0], f[1]);
+		out.on = true;
+	}
+	return out;
+}
+
+function netwatchOn() {
+	let ls = crontab();
+	for (let i = 0; i < length(ls); i++)
+		if (substr(trim(ls[i]), 0, 1) != '#' && index(ls[i], 'netwatch') >= 0)
+			return true;
+	return false;
+}
+
+// ---------------------------------------------------------------------------------------------
+// adblock
+
+function hasAdblockFast() {
+	return access('/etc/init.d/adblock-fast') ? true : false;
+}
+
+function confFiles(dir) {
+	let out = [];
+	let all = lsdir(dir) || [];
+	for (let i = 0; i < length(all); i++)
+		if (match(all[i], /\.conf$/))
+			push(out, all[i]);
+	return sort(out);
+}
+
+// Domains in the hand-written dnsmasq blocklists (address=/domain/...).
+function manualDomains(file) {
+	let s = readfile(file);
+	let seen = {}, out = [];
+	if (!s)
+		return out;
+	let ls = split(s, '\n');
+	for (let i = 0; i < length(ls); i++) {
+		let m = match(ls[i], /^address=\/([^\/]+)\//);
+		if (m && !seen[m[1]]) {
+			seen[m[1]] = true;
+			push(out, m[1]);
+		}
+	}
+	return out;
+}
+
+function confdir(c) {
+	let d = null;
+	c.foreach('dhcp', 'dnsmasq', function(s) {
+		if (!d && s.confdir)
+			d = s.confdir;
+	});
+	return d ? d : '/tmp/dnsmasq.d';
+}
+
+function adblockStatus(c) {
+	let out = { pkg: null, on: false, state: null, n: 0, custom: 0, paused: false };
+	if (hasAdblockFast()) {
+		out.pkg = 'adblock-fast';
+		out.on = c.get('adblock-fast', 'config', 'enabled') == '1';
+		let s = sh("ubus call service list '{\"name\":\"adblock-fast\"}'");
+		let m = match(s, /"entries": *([0-9]+)/);
+		if (m)
+			out.n = num(m[1]);
+		m = match(s, /"status": *"([^"]*)"/);
+		if (m)
+			out.state = m[1];
+		out.custom = length(asList(c.get('adblock-fast', 'config', 'blocked_domain')));
+	}
+	let dir = confdir(c);
+	let files = confFiles(dir);
+	for (let i = 0; i < length(files); i++)
+		if (index(files[i], 'adb') < 0)
+			out.custom += length(manualDomains(dir + '/' + files[i]));
+	let off = confFiles(dir + '.off');
+	if (length(off))
+		out.paused = true;
+	if (!out.pkg)
+		out.on = length(files) > 0;
+	return out;
+}
+
+function restartDns() {
+	bg('sleep 1; /etc/init.d/dnsmasq restart');
+}
+
+// ---------------------------------------------------------------------------------------------
+// clients
+
+function clientList(c) {
+	let leases = {};
+	let ls = lines(readfile('/tmp/dhcp.leases'));
+	for (let i = 0; i < length(ls); i++) {
+		let f = split(ls[i], ' ');
+		if (length(f) >= 4)
+			leases[lc(f[1])] = { ip: f[2], name: f[3] == '*' ? null : f[3] };
+	}
+
+	let map = {};
+	let order = [];
+	let get = function(mac) {
+		if (!map[mac]) {
+			map[mac] = { m: mac, b: 'lan' };
+			push(order, mac);
+		}
+		return map[mac];
+	};
+
+	let ws = wirelessStatus();
+	let ifs = wifiIfaces(ws);
+	for (let i = 0; i < length(ifs); i++) {
+		if (ifs[i].mode != 'ap' || !ifs[i].ifname)
+			continue;
+		let a = js("ubus call iwinfo assoclist '{\"device\":\"" + ifs[i].ifname + "\"}'");
+		let res = (a && a.results) ? a.results : [];
+		for (let k = 0; k < length(res); k++) {
+			let x = get(lc(res[k].mac));
+			x.b = ifs[i].band || 'wifi';
+			x.s = res[k].signal;
+			x.r = (res[k].rx && res[k].rx.rate) ? res[k].rx.rate : null;
+			x.t = (res[k].tx && res[k].tx.rate) ? res[k].tx.rate : null;
+			x.a = res[k].inactive;
+			x.w = ifs[i].ssid;
+			if (ifs[i].guest)
+				x.g = true;
+		}
+	}
+
+	let neigh = lines(sh('ip -4 neigh show'));
+	for (let i = 0; i < length(neigh); i++) {
+		let m = match(neigh[i], /^([0-9.]+) dev (\S+) lladdr ([0-9a-fA-F:]+) (.*)$/);
+		if (!m || substr(m[2], 0, 3) != 'br-')
+			continue;
+		if (match(m[4], /FAILED|INCOMPLETE/))
+			continue;
+		let x = get(lc(m[3]));
+		x.i = m[1];
+		if (m[2] == 'br-' + GUEST)
+			x.g = true;
+	}
+
+	let blocked = {};
+	c.foreach('firewall', 'rule', function(s) {
+		if (substr(s['.name'], 0, 5) == 'sy_b_' && s.src_mac)
+			blocked[lc(s.src_mac)] = true;
+	});
+
+	let out = [];
+	for (let i = 0; i < length(order); i++) {
+		let x = map[order[i]];
+		let l = leases[x.m];
+		if (l) {
+			if (!x.i)
+				x.i = l.ip;
+			if (l.name)
+				x.n = l.name;
+		}
+		if (blocked[x.m])
+			x.x = true;
+		push(out, x);
+	}
+
+	let offline = [];
+	for (let mac in blocked) {
+		if (map[mac])
+			continue;
+		let l = leases[mac];
+		push(offline, { m: mac, n: l ? l.name : null, i: l ? l.ip : null, x: true });
+	}
+	return { c: out, off: offline };
+}
+
+// ---------------------------------------------------------------------------------------------
+// guest network
+
+function lanForwardTargets(c) {
+	let out = [];
+	c.foreach('firewall', 'forwarding', function(s) {
+		if (s.src == 'lan' && s.dest && s.dest != 'lan' && index(out, s.dest) < 0)
+			push(out, s.dest);
+	});
+	if (!length(out))
+		push(out, 'wan');
+	return out;
+}
+
+function guestOn(c) {
+	return c.get('network', GUEST) == 'interface';
+}
+
+function removeGuest(c) {
+	for (let s in [ GUEST, GUEST + '_dev' ])
+		if (c.get('network', s))
+			c.delete('network', s);
+	if (c.get('dhcp', GUEST))
+		c.delete('dhcp', GUEST);
+	let fw = [];
+	c.foreach('firewall', null, function(s) {
+		if (substr(s['.name'], 0, length(GUEST)) == GUEST)
+			push(fw, s['.name']);
+	});
+	for (let i = 0; i < length(fw); i++)
+		c.delete('firewall', fw[i]);
+	let wl = [];
+	c.foreach('wireless', 'wifi-iface', function(s) {
+		if (substr(s['.name'], 0, length(GUEST)) == GUEST)
+			push(wl, s['.name']);
+	});
+	for (let i = 0; i < length(wl); i++)
+		c.delete('wireless', wl[i]);
+}
+
+function addGuest(c, ssid, key) {
+	c.set('network', GUEST + '_dev', 'device');
+	c.set('network', GUEST + '_dev', 'type', 'bridge');
+	c.set('network', GUEST + '_dev', 'name', 'br-' + GUEST);
+	c.set('network', GUEST + '_dev', 'bridge_empty', '1');
+	c.set('network', GUEST, 'interface');
+	c.set('network', GUEST, 'proto', 'static');
+	c.set('network', GUEST, 'device', 'br-' + GUEST);
+	c.set('network', GUEST, 'ipaddr', GUEST_IP);
+	c.set('network', GUEST, 'netmask', '255.255.255.0');
+
+	c.set('dhcp', GUEST, 'dhcp');
+	c.set('dhcp', GUEST, 'interface', GUEST);
+	c.set('dhcp', GUEST, 'start', '100');
+	c.set('dhcp', GUEST, 'limit', '150');
+	c.set('dhcp', GUEST, 'leasetime', '2h');
+
+	c.set('firewall', GUEST + '_zone', 'zone');
+	c.set('firewall', GUEST + '_zone', 'name', GUEST);
+	c.set('firewall', GUEST + '_zone', 'network', [ GUEST ]);
+	c.set('firewall', GUEST + '_zone', 'input', 'REJECT');
+	c.set('firewall', GUEST + '_zone', 'output', 'ACCEPT');
+	c.set('firewall', GUEST + '_zone', 'forward', 'REJECT');
+	let dests = lanForwardTargets(c);
+	for (let i = 0; i < length(dests); i++) {
+		let n = GUEST + '_fwd' + i;
+		c.set('firewall', n, 'forwarding');
+		c.set('firewall', n, 'src', GUEST);
+		c.set('firewall', n, 'dest', dests[i]);
+	}
+	c.set('firewall', GUEST + '_dns', 'rule');
+	c.set('firewall', GUEST + '_dns', 'name', 'Guest DNS');
+	c.set('firewall', GUEST + '_dns', 'src', GUEST);
+	c.set('firewall', GUEST + '_dns', 'proto', [ 'tcp', 'udp' ]);
+	c.set('firewall', GUEST + '_dns', 'dest_port', '53');
+	c.set('firewall', GUEST + '_dns', 'target', 'ACCEPT');
+	c.set('firewall', GUEST + '_dhcp', 'rule');
+	c.set('firewall', GUEST + '_dhcp', 'name', 'Guest DHCP');
+	c.set('firewall', GUEST + '_dhcp', 'src', GUEST);
+	c.set('firewall', GUEST + '_dhcp', 'proto', 'udp');
+	c.set('firewall', GUEST + '_dhcp', 'dest_port', '67-68');
+	c.set('firewall', GUEST + '_dhcp', 'target', 'ACCEPT');
+
+	c.foreach('wireless', 'wifi-device', function(r) {
+		let n = GUEST + '_' + r['.name'];
+		c.set('wireless', n, 'wifi-iface');
+		c.set('wireless', n, 'device', r['.name']);
+		c.set('wireless', n, 'mode', 'ap');
+		c.set('wireless', n, 'network', GUEST);
+		c.set('wireless', n, 'ssid', ssid);
+		c.set('wireless', n, 'encryption', 'psk2');
+		c.set('wireless', n, 'key', key);
+		c.set('wireless', n, 'isolate', '1');
+	});
+}
+
+// ---------------------------------------------------------------------------------------------
+// methods
+
+function status() {
+	let c = cursor();
+	let board = js('ubus call system board') || {};
+	let info = js('ubus call system info') || {};
+	let dump = ifaceDump();
+	let up = upstream(dump);
+
+	let res = {
+		v: VERSION,
+		host: board.hostname,
+		model: board.model,
+		release: board.release ? board.release.description : null,
+		kernel: board.kernel,
+		uptime: info.uptime,
+		load: info.load ? map(info.load, (l) => l / 65536.0) : null,
+		mem: info.memory ? { total: info.memory.total, avail: info.memory.available || info.memory.free } : null,
+		time: trim(sh("date '+%Y-%m-%d %H:%M:%S'")),
+		zone: c.get_first('system', 'system', 'zonename'),
+		lan: lanInfo(dump)
+	};
+
+	if (up) {
+		let w = js("ubus call iwinfo info '{\"device\":\"" + up.dev + "\"}'");
+		if (w) {
+			up.ssid = w.ssid;
+			up.signal = w.signal;
+			up.rate = w.bitrate;
+		}
+		up.rx = num(readTrim('/sys/class/net/' + up.dev + '/statistics/rx_bytes'));
+		up.tx = num(readTrim('/sys/class/net/' + up.dev + '/statistics/tx_bytes'));
+		res.up = up;
+	}
+
+	let wn = warpIface(c);
+	if (wn) {
+		let st = js('ubus call network.interface.' + wn + ' status') || {};
+		res.warp = {
+			iface: wn,
+			up: st.up ? true : false,
+			route: length(trim(sh('ip -4 route show default dev ' + shq(wn) + ' 2>/dev/null'))) > 0,
+			hs: wgHandshakeAge(wn),
+			auto: c.get('network', wn, 'auto') != '0'
+		};
+	}
+
+	res.ab = adblockStatus(c);
+	let sch = ledSchedule();
+	res.led = { off: ledsOff(), n: length(ledNames()), sch: sch.on, offAt: sch.offAt, onAt: sch.onAt };
+	res.nw = { on: netwatchOn(), n: length(lines(readfile(NETWATCH))) };
+	res.guest = { on: guestOn(c) };
+	let cl = clientList(c);
+	res.clients = length(cl.c);
+
+	let df = lines(sh('df -k /overlay 2>/dev/null'));
+	if (length(df) > 1) {
+		let f = split(trim(df[1]), /\s+/);
+		res.storage = { total: num(f[1]), free: num(f[3]) };
+	}
+	return res;
+}
+
+function wifiConfig() {
+	let c = cursor();
+	let ws = wirelessStatus();
+	let live = wifiIfaces(ws);
+	let radios = [], ifaces = [];
+	c.foreach('wireless', 'wifi-device', function(s) {
+		let ch = null;
+		let sta = false;
+		for (let i = 0; i < length(live); i++) {
+			if (live[i].radio != s['.name'])
+				continue;
+			if (live[i].mode == 'sta')
+				sta = true;
+			if (ch == null && live[i].ifname) {
+				let w = js("ubus call iwinfo info '{\"device\":\"" + live[i].ifname + "\"}'");
+				if (w && w.channel)
+					ch = w.channel;
+			}
+		}
+		push(radios, {
+			sec: s['.name'], band: s.band, channel: s.channel, live: ch, htmode: s.htmode,
+			txpower: s.txpower, country: s.country, disabled: s.disabled == '1', locked: sta
+		});
+	});
+	c.foreach('wireless', 'wifi-iface', function(s) {
+		let ifname = null;
+		for (let i = 0; i < length(live); i++)
+			if (live[i].section == s['.name'])
+				ifname = live[i].ifname;
+		push(ifaces, {
+			sec: s['.name'], radio: s.device, mode: s.mode, ssid: s.ssid, enc: s.encryption, key: s.key,
+			disabled: s.disabled == '1', hidden: s.hidden == '1', net: asList(s.network), ifname: ifname,
+			guest: substr(s['.name'], 0, length(GUEST)) == GUEST
+		});
+	});
+	return { radios: radios, ifaces: ifaces, guest: guestOn(c) };
+}
+
+function setWifi(a) {
+	let c = cursor();
+	let sec = a.sec;
+	if (!sec || !match(sec, /^[A-Za-z0-9_]+$/))
+		return err('No such Wi-Fi section.');
+	let t = c.get('wireless', sec);
+	if (t == 'wifi-device') {
+		if (a.channel != null) {
+			let locked = false;
+			c.foreach('wireless', 'wifi-iface', function(s) {
+				if (s.device == sec && s.mode == 'sta' && s.disabled != '1')
+					locked = true;
+			});
+			if (locked)
+				return err("This radio also carries the upstream link, so it has to stay on the upstream router's channel.");
+			if (a.channel != 'auto' && !match(a.channel, /^[0-9]{1,3}$/))
+				return err('Bad channel.');
+			c.set('wireless', sec, 'channel', a.channel);
+		}
+		if (a.txpower != null) {
+			if (a.txpower == '' || a.txpower == 'auto')
+				c.delete('wireless', sec, 'txpower');
+			else if (match(a.txpower, /^[0-9]{1,2}$/))
+				c.set('wireless', sec, 'txpower', a.txpower);
+			else
+				return err('Bad transmit power.');
+		}
+		if (a.disabled != null)
+			c.set('wireless', sec, 'disabled', a.disabled ? '1' : '0');
+	}
+	else if (t == 'wifi-iface') {
+		if (a.ssid != null) {
+			if (length(a.ssid) < 1 || length(a.ssid) > 32)
+				return err('The network name has to be 1 to 32 characters.');
+			c.set('wireless', sec, 'ssid', a.ssid);
+		}
+		if (a.enc != null) {
+			if (!match(a.enc, /^(none|psk2|psk-mixed|sae|sae-mixed|owe)$/))
+				return err('Unsupported security type.');
+			c.set('wireless', sec, 'encryption', a.enc);
+		}
+		if (a.key != null) {
+			let enc = c.get('wireless', sec, 'encryption');
+			if (enc != 'none' && enc != 'owe' && (length(a.key) < 8 || length(a.key) > 63))
+				return err('The password has to be 8 to 63 characters.');
+			c.set('wireless', sec, 'key', a.key);
+		}
+		if (a.hidden != null)
+			c.set('wireless', sec, 'hidden', a.hidden ? '1' : '0');
+		if (a.disabled != null)
+			c.set('wireless', sec, 'disabled', a.disabled ? '1' : '0');
+	}
+	else
+		return err('No such Wi-Fi section.');
+	c.commit('wireless');
+	bg('sleep 1; wifi reload');
+	return { ok: true };
+}
+
+function setGuest(a) {
+	let c = cursor();
+	if (!a.on) {
+		if (!guestOn(c))
+			return { ok: true, on: false };
+		removeGuest(c);
+	}
+	else {
+		let ssid = a.ssid || 'Guest';
+		let key = a.key || '';
+		if (length(ssid) > 32)
+			return err('The network name has to be 1 to 32 characters.');
+		if (length(key) < 8 || length(key) > 63)
+			return err('The guest password has to be 8 to 63 characters.');
+		if (guestOn(c))
+			removeGuest(c);
+		addGuest(c, ssid, key);
+	}
+	for (let p in [ 'network', 'dhcp', 'firewall', 'wireless' ])
+		c.commit(p);
+	bg('sleep 1; /etc/init.d/network reload; sleep 2; /etc/init.d/firewall reload; /etc/init.d/dnsmasq reload; wifi reload');
+	return { ok: true, on: a.on ? true : false };
+}
+
+function setWarp(a) {
+	let c = cursor();
+	let wn = warpIface(c);
+	if (!wn)
+		return err("There's no WireGuard (WARP) interface on this router.");
+	c.set('network', wn, 'auto', a.on ? '1' : '0');
+	c.commit('network');
+	if (a.on)
+		bg('ifup ' + wn + '; sleep 4; ip -4 route show default dev ' + wn + ' | grep -q . || ip route add default dev ' + wn + ' metric 50');
+	else
+		bg('ip route del default dev ' + wn + ' 2>/dev/null; ifdown ' + wn);
+	return { ok: true, on: a.on ? true : false };
+}
+
+function setAdblock(a) {
+	let c = cursor();
+	let dir = confdir(c);
+	let off = dir + '.off';
+	if (a.on) {
+		let files = confFiles(off);
+		for (let i = 0; i < length(files); i++)
+			rename(off + '/' + files[i], dir + '/' + files[i]);
+	}
+	else {
+		let files = confFiles(dir);
+		for (let i = 0; i < length(files); i++) {
+			if (index(files[i], 'adb') >= 0)
+				continue;
+			mkdir(off);
+			rename(dir + '/' + files[i], off + '/' + files[i]);
+		}
+	}
+	if (hasAdblockFast()) {
+		c.set('adblock-fast', 'config', 'enabled', a.on ? '1' : '0');
+		c.commit('adblock-fast');
+		if (a.on)
+			bg('/etc/init.d/adblock-fast enable; /etc/init.d/adblock-fast start');
+		else
+			bg('/etc/init.d/adblock-fast stop; /etc/init.d/adblock-fast disable; sleep 1; /etc/init.d/dnsmasq restart');
+	}
+	else
+		restartDns();
+	return { ok: true, on: a.on ? true : false };
+}
+
+function domains() {
+	let c = cursor();
+	let res = { pkg: hasAdblockFast() ? 'adblock-fast' : null, block: [], allow: [], manual: [], lists: [] };
+	if (res.pkg) {
+		res.block = asList(c.get('adblock-fast', 'config', 'blocked_domain'));
+		res.allow = asList(c.get('adblock-fast', 'config', 'allowed_domain'));
+	}
+	let dir = confdir(c);
+	for (let d in [ dir, dir + '.off' ]) {
+		let files = confFiles(d);
+		for (let i = 0; i < length(files); i++) {
+			if (index(files[i], 'adb') >= 0)
+				continue;
+			let ds = manualDomains(d + '/' + files[i]);
+			if (length(ds) > 200)
+				push(res.lists, { f: files[i], n: length(ds), on: d == dir });
+			else
+				for (let k = 0; k < length(ds); k++)
+					push(res.manual, { d: ds[k], f: files[i], on: d == dir });
+		}
+	}
+	return res;
+}
+
+function removeFromFile(path, dom) {
+	let s = readfile(path);
+	if (!s)
+		return false;
+	let ls = split(s, '\n'), keep = [], hit = false;
+	for (let i = 0; i < length(ls); i++) {
+		let m = match(ls[i], /^(address|server)=\/([^\/]+)\//);
+		if (m && m[2] == dom) {
+			hit = true;
+			continue;
+		}
+		push(keep, ls[i]);
+	}
+	if (hit)
+		writefile(path, join('\n', keep));
+	return hit;
+}
+
+function setDomain(a) {
+	let dom = lc(trim(a.domain || ''));
+	dom = replace(dom, /^https?:\/\//, '');
+	dom = replace(dom, /\/.*$/, '');
+	if (!match(dom, DOMAIN_RE))
+		return err("That doesn't look like a domain.");
+	let act = a.action;
+	let c = cursor();
+	let fast = hasAdblockFast();
+	let dir = confdir(c);
+
+	let dropList = function(opt) {
+		let l = asList(c.get('adblock-fast', 'config', opt));
+		let k = filter(l, (x) => x != dom);
+		if (length(k) != length(l)) {
+			if (length(k))
+				c.set('adblock-fast', 'config', opt, k);
+			else
+				c.delete('adblock-fast', 'config', opt);
+			return true;
+		}
+		return false;
+	};
+
+	if (act == 'remove' || act == 'block' || act == 'allow') {
+		let changedFast = false;
+		if (fast) {
+			changedFast = dropList('blocked_domain') || changedFast;
+			changedFast = dropList('allowed_domain') || changedFast;
+		}
+		let changedFiles = false;
+		if (act != 'block')
+			for (let d in [ dir, dir + '.off' ]) {
+				let files = confFiles(d);
+				for (let i = 0; i < length(files); i++)
+					if (index(files[i], 'adb') < 0 && removeFromFile(d + '/' + files[i], dom))
+						changedFiles = true;
+			}
+		if (act == 'block') {
+			if (fast) {
+				let l = asList(c.get('adblock-fast', 'config', 'blocked_domain'));
+				push(l, dom);
+				c.set('adblock-fast', 'config', 'blocked_domain', l);
+				changedFast = true;
+			}
+			else {
+				let f = dir + '/switchyard.conf';
+				mkdir(dir);
+				removeFromFile(f, dom);
+				let s = readfile(f) || '';
+				if (length(s) && substr(s, -1) != '\n')
+					s += '\n';
+				writefile(f, s + 'address=/' + dom + '/0.0.0.0\naddress=/' + dom + '/::\n');
+				changedFiles = true;
+			}
+		}
+		if (act == 'allow' && fast) {
+			let l = asList(c.get('adblock-fast', 'config', 'allowed_domain'));
+			push(l, dom);
+			c.set('adblock-fast', 'config', 'allowed_domain', l);
+			changedFast = true;
+		}
+		if (changedFast) {
+			c.commit('adblock-fast');
+			if (c.get('adblock-fast', 'config', 'enabled') == '1')
+				bg('/etc/init.d/adblock-fast restart');
+		}
+		if (changedFiles && !changedFast)
+			restartDns();
+		else if (changedFiles)
+			bg('sleep 3; /etc/init.d/dnsmasq restart');
+		return { ok: true, domain: dom };
+	}
+	return err('Unknown action.');
+}
+
+function setLedSchedule(a) {
+	let ls = filter(crontab(), (l) => !isLedLine(l));
+	if (a.enabled) {
+		let off = match(a.off || '', TIME_RE), on = match(a.on || '', TIME_RE);
+		if (!off || !on)
+			return err('Times have to look like 23:00.');
+		push(ls, num(off[2]) + ' ' + num(off[1]) + ' * * * ubus call switchyard leds \'{"on":false}\'');
+		push(ls, num(on[2]) + ' ' + num(on[1]) + ' * * * ubus call switchyard leds \'{"on":true}\'');
+	}
+	writeCrontab(ls);
+	return { ok: true };
+}
+
+function setNetwatch(a) {
+	let ls = filter(crontab(), (l) => index(l, 'netwatch') < 0);
+	if (a.on) {
+		let up = upstream(ifaceDump());
+		let gw = up ? up.gw : null;
+		if (gw)
+			push(ls, '* * * * * ping -c1 -W2 ' + gw + ' >/dev/null || echo "$(date) gateway fail" >> ' + NETWATCH);
+		let wn = warpIface(cursor());
+		let hs = wn ? ' $(wg show ' + wn + ' latest-handshakes 2>/dev/null)' : '';
+		push(ls, '* * * * * ping -c1 -W2 1.1.1.1 >/dev/null || echo "$(date) internet fail' + hs + '" >> ' + NETWATCH);
+	}
+	writeCrontab(ls);
+	return { ok: true, on: a.on ? true : false };
+}
+
+function logs(a) {
+	let n = a.lines ? a.lines : 120;
+	if (n > 300)
+		n = 300;
+	let kind = a.kind || 'netwatch';
+	if (kind == 'clear') {
+		writefile(NETWATCH, '');
+		return { ok: true, lines: [] };
+	}
+	let out;
+	if (kind == 'system')
+		out = lines(sh('logread -l ' + n));
+	else if (kind == 'kernel')
+		out = tail(lines(sh('dmesg')), n);
+	else
+		out = tail(lines(readfile(NETWATCH)), n);
+	return { kind: kind, lines: out };
+}
+
+function ping(host) {
+	let out = sh('ping -c 2 -W 2 ' + shq(host) + ' 2>&1');
+	let m = match(out, /([0-9]+) packets received/);
+	let rx = m ? num(m[1]) : 0;
+	let avg = match(out, /= [0-9.]+\/([0-9.]+)\//);
+	return { host: host, ok: rx > 0, recv: rx, ms: avg ? +avg[1] : null };
+}
+
+function diag() {
+	let dump = ifaceDump();
+	let up = upstream(dump);
+	let res = { gw: up && up.gw ? ping(up.gw) : null, net: ping('1.1.1.1') };
+	let dns = sh('nslookup openwrt.org 127.0.0.1 2>&1');
+	res.dns = { ok: match(dns, /Address:? *[0-9]/) && !match(dns, /can't resolve|SERVFAIL|NXDOMAIN/) ? true : false };
+	res.routes = lines(sh('ip -4 route show default'));
+	let wn = warpIface(cursor());
+	if (wn)
+		res.warp = { iface: wn, hs: wgHandshakeAge(wn) };
+	return res;
+}
+
+function scan(a) {
+	let ws = wirelessStatus();
+	let ifs = wifiIfaces(ws);
+	let dev = null;
+	for (let i = 0; i < length(ifs); i++)
+		if (ifs[i].radio == a.radio && ifs[i].ifname && !dev)
+			dev = ifs[i].ifname;
+	if (!dev)
+		return err('That radio has no active network to scan with.');
+	let r = js("ubus call iwinfo scan '{\"device\":\"" + dev + "\"}'");
+	let res = (r && r.results) ? r.results : [];
+	let out = [];
+	for (let i = 0; i < length(res); i++)
+		push(out, { s: res[i].ssid, c: res[i].channel, g: res[i].signal, b: res[i].bssid });
+	out = sort(out, (x, y) => (y.g || -200) - (x.g || -200));
+	return { radio: a.radio, nets: length(out) > 50 ? slice(out, 0, 50) : out };
+}
+
+function block(a) {
+	let mac = lc(a.mac || '');
+	if (!match(mac, MAC_RE))
+		return err('Bad MAC address.');
+	let c = cursor();
+	let sec = 'sy_b_' + replace(mac, /:/g, '');
+	if (a.on) {
+		c.set('firewall', sec, 'rule');
+		c.set('firewall', sec, 'name', 'Switchyard block ' + mac);
+		c.set('firewall', sec, 'src', '*');
+		c.set('firewall', sec, 'src_mac', mac);
+		c.set('firewall', sec, 'dest', '*');
+		c.set('firewall', sec, 'proto', 'all');
+		c.set('firewall', sec, 'target', 'REJECT');
+	}
+	else if (c.get('firewall', sec))
+		c.delete('firewall', sec);
+	c.commit('firewall');
+	system('/etc/init.d/firewall reload >/dev/null 2>&1');
+	if (a.on)
+		kick({ mac: mac, ban: 2000 });
+	return { ok: true, mac: mac, blocked: a.on ? true : false };
+}
+
+function kick(a) {
+	let mac = lc(a.mac || '');
+	if (!match(mac, MAC_RE))
+		return err('Bad MAC address.');
+	let ban = a.ban ? a.ban : 30000;
+	let ifs = wifiIfaces(wirelessStatus());
+	let hit = 0;
+	for (let i = 0; i < length(ifs); i++) {
+		if (ifs[i].mode != 'ap' || !ifs[i].ifname)
+			continue;
+		let r = system("ubus call hostapd." + ifs[i].ifname + " del_client '{\"addr\":\"" + mac + "\",\"reason\":5,\"deauth\":true,\"ban_time\":" + ban + "}' >/dev/null 2>&1");
+		if (r == 0)
+			hit++;
+	}
+	return { ok: true, mac: mac, from: hit };
+}
+
+function sysinfo() {
+	let board = js('ubus call system board') || {};
+	let res = {
+		model: board.model, board: board.board_name, release: board.release ? board.release.description : null,
+		target: board.release ? board.release.target : null, kernel: board.kernel
+	};
+	let n = trim(sh('apk list -I 2>/dev/null | wc -l'));
+	if (num(n) == 0)
+		n = trim(sh('opkg list-installed 2>/dev/null | wc -l'));
+	res.packages = num(n);
+	let up = readfile('/tmp/switchyard-upgrades');
+	res.upgrades = up == null ? null : lines(up);
+	res.checking = access('/tmp/switchyard-upgrades.tmp') ? true : false;
+	return res;
+}
+
+function checkUpgrades() {
+	if (access('/tmp/switchyard-upgrades.tmp'))
+		return { ok: true, checking: true };
+	writefile('/tmp/switchyard-upgrades.tmp', '');
+	bg("apk update; apk list -u 2>/dev/null | awk '{print $1}' > /tmp/switchyard-upgrades.tmp; mv /tmp/switchyard-upgrades.tmp /tmp/switchyard-upgrades");
+	return { ok: true, checking: true };
+}
+
+// Creates (or renews) a login that can only use this object, so the apps never keep the root password.
+function setup() {
+	let c = cursor();
+	let pw = substr(trim(sh('head -c 64 /dev/urandom | md5sum')), 0, 32);
+	if (length(pw) < 32)
+		return err("Couldn't make a password on the router.");
+	let hash = trim(sh('uhttpd -m ' + shq(pw) + ' 2>/dev/null'));
+	if (substr(hash, 0, 1) != '$')
+		hash = trim(sh('openssl passwd -1 ' + shq(pw) + ' 2>/dev/null'));
+	if (substr(hash, 0, 1) != '$')
+		return err("Couldn't hash the password (uhttpd -m).");
+	let old = [];
+	c.foreach('rpcd', 'login', function(s) {
+		if (s.username == 'switchyard')
+			push(old, s['.name']);
+	});
+	for (let i = 0; i < length(old); i++)
+		c.delete('rpcd', old[i]);
+	let s = c.add('rpcd', 'login');
+	c.set('rpcd', s, 'username', 'switchyard');
+	c.set('rpcd', s, 'password', hash);
+	c.set('rpcd', s, 'read', [ 'switchyard' ]);
+	c.set('rpcd', s, 'write', [ 'switchyard' ]);
+	c.commit('rpcd');
+	return { ok: true, user: 'switchyard', pass: pw };
+}
+
+// Lets a device on the upstream network (the bridge) reach this router's web API.
+function allow(a) {
+	let ip = a.ip || '';
+	if (!match(ip, IP_RE))
+		return err('Bad IP address.');
+	let c = cursor();
+	let up = upstream(ifaceDump());
+	if (!up)
+		return err('No upstream connection right now.');
+	let zone = null;
+	c.foreach('firewall', 'zone', function(s) {
+		if (!zone && index(asList(s.network), up.iface) >= 0)
+			zone = s.name;
+	});
+	if (!zone)
+		return err("Couldn't find the firewall zone for " + up.iface + '.');
+	c.set('firewall', 'sy_allow', 'rule');
+	c.set('firewall', 'sy_allow', 'name', 'Switchyard: Keystone bridge');
+	c.set('firewall', 'sy_allow', 'src', zone);
+	c.set('firewall', 'sy_allow', 'src_ip', ip);
+	c.set('firewall', 'sy_allow', 'proto', 'tcp');
+	c.set('firewall', 'sy_allow', 'dest_port', '80');
+	c.set('firewall', 'sy_allow', 'target', 'ACCEPT');
+	c.commit('firewall');
+	system('/etc/init.d/firewall reload >/dev/null 2>&1');
+	return { ok: true, host: up.ip };
+}
+
+function reboot() {
+	bg('sleep 2; reboot');
+	return { ok: true };
+}
+
+function wrap(fn) {
+	return function(req) {
+		try {
+			return fn(req.args || {});
+		}
+		catch (e) {
+			return err('Router script error: ' + e);
+		}
+	};
+}
+
+return {
+	switchyard: {
+		version: { call: wrap(function(a) { return { v: VERSION }; }) },
+		status: { call: wrap((a) => status()) },
+		clients: { call: wrap((a) => clientList(cursor())) },
+		kick: { args: { mac: 'mac', ban: 0 }, call: wrap(kick) },
+		block: { args: { mac: 'mac', on: true }, call: wrap(block) },
+		adblock: { args: { on: true }, call: wrap(setAdblock) },
+		domains: { call: wrap((a) => domains()) },
+		domain: { args: { domain: 'domain', action: 'action' }, call: wrap(setDomain) },
+		warp: { args: { on: true }, call: wrap(setWarp) },
+		leds: { args: { on: true }, call: wrap((a) => setLeds(a.on ? true : false)) },
+		ledsched: { args: { enabled: true, off: 'off', on: 'on' }, call: wrap(setLedSchedule) },
+		netwatch: { args: { on: true }, call: wrap(setNetwatch) },
+		logs: { args: { kind: 'kind', lines: 0 }, call: wrap(logs) },
+		diag: { call: wrap((a) => diag()) },
+		wifi: { call: wrap((a) => wifiConfig()) },
+		wifi_set: {
+			args: { sec: 'sec', ssid: 'ssid', key: 'key', enc: 'enc', hidden: true, disabled: true, channel: 'channel', txpower: 'txpower' },
+			call: wrap(setWifi)
+		},
+		guest: { args: { on: true, ssid: 'ssid', key: 'key' }, call: wrap(setGuest) },
+		scan: { args: { radio: 'radio' }, call: wrap(scan) },
+		sys: { call: wrap((a) => sysinfo()) },
+		upgrades: { call: wrap((a) => checkUpgrades()) },
+		reboot: { call: wrap((a) => reboot()) },
+		setup: { call: wrap((a) => setup()) },
+		allow: { args: { ip: 'ip' }, call: wrap(allow) }
+	}
+};
