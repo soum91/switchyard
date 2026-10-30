@@ -1,0 +1,20 @@
+{
+	"luci-app-lightsout": {
+		"description": "Router light schedule",
+		"read": {
+			"uci": [ "lightsout" ],
+			"file": {
+				"/sys/class/leds": [ "list" ],
+				"/usr/sbin/lightsout status": [ "exec" ]
+			}
+		},
+		"write": {
+			"uci": [ "lightsout" ],
+			"file": {
+				"/usr/sbin/lightsout on": [ "exec" ],
+				"/usr/sbin/lightsout off": [ "exec" ],
+				"/usr/sbin/lightsout apply": [ "exec" ]
+			}
+		}
+	}
+}

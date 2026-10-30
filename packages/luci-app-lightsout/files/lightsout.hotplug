@@ -1,0 +1,2 @@
+# The clock just synced: the boot-time guess may have been wrong, so decide again.
+[ "$ACTION" = "stratum" ] && /usr/sbin/lightsout apply

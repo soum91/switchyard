@@ -3,7 +3,7 @@ name: Build unsigned IPA
 on:
   push:
     branches: [main]
-    paths-ignore: ["router/**", "**.md"]
+    paths-ignore: ["router/**", "packages/**", ".github/workflows/packages.yml", "**.md"]
   workflow_dispatch:
 
 permissions:

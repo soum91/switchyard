@@ -6,7 +6,7 @@
 import { readfile, writefile, popen, lsdir, access, unlink, rename, mkdir } from 'fs';
 import { cursor } from 'uci';
 
-const VERSION = 1;
+const VERSION = 2;
 const LED_DIR = '/sys/class/leds';
 const NETWATCH = '/tmp/netwatch.log';
 const MAC_RE = /^([0-9a-f]{2}:){5}[0-9a-f]{2}$/;
@@ -273,7 +273,15 @@ function ledsOff() {
 	return true;
 }
 
+function hasLightsOut() {
+	return access('/usr/sbin/lightsout') ? true : false;
+}
+
 function setLeds(on) {
+	if (hasLightsOut()) {
+		system('/usr/sbin/lightsout ' + (on ? 'on' : 'off') + ' >/dev/null 2>&1');
+		return { ok: true, off: ledsOff() };
+	}
 	let names = ledNames();
 	let saved = {};
 	let s = readfile('/tmp/switchyard-leds');
@@ -331,6 +339,10 @@ function hhmm(min, hour) {
 }
 
 function ledSchedule() {
+	if (hasLightsOut()) {
+		let c = cursor();
+		return { on: c.get('lightsout', 'main', 'enabled') == '1', offAt: c.get('lightsout', 'main', 'off'), onAt: c.get('lightsout', 'main', 'on'), pkg: true };
+	}
 	let out = { on: false, offAt: null, onAt: null };
 	let ls = crontab();
 	for (let i = 0; i < length(ls); i++) {
@@ -663,7 +675,7 @@ function status() {
 
 	res.ab = adblockStatus(c);
 	let sch = ledSchedule();
-	res.led = { off: ledsOff(), n: length(ledNames()), sch: sch.on, offAt: sch.offAt, onAt: sch.onAt };
+	res.led = { off: ledsOff(), n: length(ledNames()), sch: sch.on, offAt: sch.offAt, onAt: sch.onAt, pkg: sch.pkg ? true : false };
 	res.nw = { on: netwatchOn(), n: length(lines(readfile(NETWATCH))) };
 	res.guest = { on: guestOn(c) };
 	let cl = clientList(c);
@@ -962,6 +974,19 @@ function setDomain(a) {
 }
 
 function setLedSchedule(a) {
+	if (hasLightsOut()) {
+		if (a.enabled && (!match(a.off || '', TIME_RE) || !match(a.on || '', TIME_RE)))
+			return err('Times have to look like 23:00.');
+		let c = cursor();
+		c.set('lightsout', 'main', 'enabled', a.enabled ? '1' : '0');
+		if (a.enabled) {
+			c.set('lightsout', 'main', 'off', a.off);
+			c.set('lightsout', 'main', 'on', a.on);
+		}
+		c.commit('lightsout');
+		bg('rm -f /tmp/lightsout.override; /usr/sbin/lightsout cron; /usr/sbin/lightsout apply');
+		return { ok: true };
+	}
 	let ls = filter(crontab(), (l) => !isLedLine(l));
 	if (a.enabled) {
 		let off = match(a.off || '', TIME_RE), on = match(a.on || '', TIME_RE);

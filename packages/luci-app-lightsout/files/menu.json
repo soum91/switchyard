@@ -1,0 +1,14 @@
+{
+	"admin/system/lightsout": {
+		"title": "Router lights",
+		"order": 45,
+		"action": {
+			"type": "view",
+			"path": "lightsout"
+		},
+		"depends": {
+			"acl": [ "luci-app-lightsout" ],
+			"uci": { "lightsout": true }
+		}
+	}
+}

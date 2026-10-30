@@ -1,0 +1,83 @@
+name: Build OpenWrt packages
+
+on:
+  push:
+    branches: [main]
+    paths: ["packages/**", ".github/workflows/packages.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  OPENWRT: "25.12.5"
+  TARGET: mediatek/filogic
+  PKG: luci-app-lightsout
+  BUILD: ${{ github.run_number }}
+  TAG: lightsout-build-${{ github.run_number }}
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get the OpenWrt SDK
+        run: |
+          sudo apt-get -qq update && sudo apt-get -qq install -y zstd rsync gawk >/dev/null
+          BASE="https://downloads.openwrt.org/releases/$OPENWRT/targets/$TARGET"
+          F=$(curl -fsSL "$BASE/" | grep -oE 'openwrt-sdk-[^"<>]+\.tar\.(zst|xz)' | head -n 1)
+          echo "SDK: $F"
+          test -n "$F"
+          curl -fsSL "$BASE/$F" -o "sdk.${F##*.}"
+          mkdir sdk
+          tar -xf sdk.* -C sdk --strip-components=1
+
+      - name: Build
+        run: |
+          set -o pipefail
+          cp -r "packages/$PKG" sdk/package/
+          cd sdk
+          make defconfig >/dev/null
+          echo "CONFIG_PACKAGE_$PKG=m" >> .config
+          echo "# CONFIG_SIGNED_PACKAGES is not set" >> .config
+          make defconfig >/dev/null
+          make "package/$PKG/compile" V=s 2>&1 | tee ../build.log | tail -n 40
+          OUT=$(find bin -name "$PKG*.apk" -o -name "$PKG*.ipk" | head -n 1)
+          test -n "$OUT"
+          VERSION=$(sed -n 's/^PKG_VERSION:=//p' "../packages/$PKG/Makefile")
+          FILE="$PKG-$VERSION-build-$BUILD.${OUT##*.}"
+          cp "$OUT" "../$FILE"
+          echo "FILE=$FILE" >> "$GITHUB_ENV"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Publish build log
+        if: always()
+        run: |
+          git config user.name "ci"
+          git config user.email "ci@users.noreply.github.com"
+          tail -n 300 build.log > ci-packages.log 2>/dev/null || echo "no build.log" > ci-packages.log
+          git stash -u -q || true
+          git checkout -q -B ci-logs-packages
+          git stash pop -q || true
+          git add -f ci-packages.log
+          git commit -qm "Packages CI log for ${GITHUB_SHA}" || true
+          git push -qf origin ci-logs-packages
+
+      - name: Changelog
+        run: |
+          .github/scripts/release-notes.sh "Lights Out ($PKG)" "$VERSION" "$BUILD" 'lightsout-build-*' "$TAG" \
+            "OpenWrt $OPENWRT package. Install on the router: wget -qO- https://raw.githubusercontent.com/soum91/switchyard/main/packages/$PKG/install.sh | sh" > notes.md
+          cat notes.md
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          target_commitish: ${{ github.sha }}
+          name: Lights Out ${{ env.VERSION }} build ${{ env.BUILD }}
+          body_path: notes.md
+          files: ${{ env.FILE }}
+          make_latest: false

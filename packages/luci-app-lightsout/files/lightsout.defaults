@@ -1,0 +1,16 @@
+#!/bin/sh
+# Take over any hand-made LED cron lines (and Switchyard's old ones) so there's one schedule.
+CR=/etc/crontabs/root
+if [ -f "$CR" ] && grep -v '^#' "$CR" | grep -qE '/sys/class/leds|switchyard leds'; then
+	lines=$(grep -v '^#' "$CR" | grep -E '/sys/class/leds|switchyard leds')
+	off=$(echo "$lines" | grep -E 'none|"on":false' | head -n 1 | awk '{printf "%02d:%02d", $2, $1}')
+	on=$(echo "$lines" | grep -vE 'none|"on":false' | head -n 1 | awk '{printf "%02d:%02d", $2, $1}')
+	[ -n "$off" ] && uci -q set lightsout.main.off="$off"
+	[ -n "$on" ] && uci -q set lightsout.main.on="$on"
+	uci -q set lightsout.main.enabled='1'
+	uci -q commit lightsout
+	sed -i '/\/sys\/class\/leds/d; /switchyard leds/d' "$CR"
+fi
+/etc/init.d/lightsout enable
+/etc/init.d/lightsout start
+exit 0
