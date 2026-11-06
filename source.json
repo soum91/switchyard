@@ -20,6 +20,15 @@
       "screenshotURLs": [],
       "versions": [
         {
+          "version": "1.0.0.9",
+          "buildVersion": "9",
+          "date": "2026-11-06T20:18:14Z",
+          "localizedDescription": "- Junction: make its route choice actually win; count Junction sources on the dashboard (cc66ba8)",
+          "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-9/Switchyard-1.0.0-build-9.ipa",
+          "size": 799067,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "1.0.0.8",
           "buildVersion": "8",
           "date": "2026-11-06T20:16:15Z",
@@ -92,11 +101,11 @@
           "minOSVersion": "17.0"
         }
       ],
-      "version": "1.0.0.8",
-      "versionDate": "2026-11-06T20:16:15Z",
-      "versionDescription": "- Show actual installed app version and build in UI (9f4bb8a)\n- Packages CI: release number = build number, so apk upgrades cleanly (1d07f35)",
-      "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-8/Switchyard-1.0.0-build-8.ipa",
-      "size": 799058,
+      "version": "1.0.0.9",
+      "versionDate": "2026-11-06T20:18:14Z",
+      "versionDescription": "- Junction: make its route choice actually win; count Junction sources on the dashboard (cc66ba8)",
+      "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-9/Switchyard-1.0.0-build-9.ipa",
+      "size": 799067,
       "appPermissions": {}
     }
   ],
