@@ -20,6 +20,15 @@
       "screenshotURLs": [],
       "versions": [
         {
+          "version": "1.0.0.11",
+          "buildVersion": "11",
+          "date": "2026-11-06T21:21:41Z",
+          "localizedDescription": "- Internet sources: always show Add a source, and say which radio is taken by what (62bbd94)",
+          "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-11/Switchyard-1.0.0-build-11.ipa",
+          "size": 803655,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "1.0.0.10",
           "buildVersion": "10",
           "date": "2026-11-06T21:02:01Z",
@@ -110,11 +119,11 @@
           "minOSVersion": "17.0"
         }
       ],
-      "version": "1.0.0.10",
-      "versionDate": "2026-11-06T21:02:01Z",
-      "versionDescription": "- Enforce visible installed version/build across app releases (c21e977)\n- Packages CI: publish the build log without stashing the SDK (3c4be91)",
-      "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-10/Switchyard-1.0.0-build-10.ipa",
-      "size": 799062,
+      "version": "1.0.0.11",
+      "versionDate": "2026-11-06T21:21:41Z",
+      "versionDescription": "- Internet sources: always show Add a source, and say which radio is taken by what (62bbd94)",
+      "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-11/Switchyard-1.0.0-build-11.ipa",
+      "size": 803655,
       "appPermissions": {}
     }
   ],
