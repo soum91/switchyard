@@ -12,7 +12,11 @@ if ! uci -q show junction | grep -q '=uplink'; then
 		for s in $(uci -q show wireless | sed -n 's/^wireless\.\([^.=]*\)=wifi-iface$/\1/p'); do
 			[ "$(uci -q get "wireless.$s.network")" = "$i" ] && [ "$(uci -q get "wireless.$s.mode")" = sta ] && name=$(uci -q get "wireless.$s.ssid")
 		done
-		[ "$i" = wan ] && [ -z "$(uci -q get network.wan.device)" ] && continue
+		# the wired WAN port only counts if something is plugged into it
+		if [ "$i" = wan ]; then
+			dev=$(uci -q get network.wan.device)
+			[ -n "$dev" ] && [ "$(cat "/sys/class/net/$dev/carrier" 2>/dev/null)" = 1 ] || continue
+		fi
 		sec=$(uci add junction uplink)
 		uci set "junction.$sec.iface=$i"
 		uci set "junction.$sec.name=$name"

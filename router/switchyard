@@ -6,7 +6,7 @@
 import { readfile, writefile, popen, lsdir, access, unlink, rename, mkdir } from 'fs';
 import { cursor } from 'uci';
 
-const VERSION = 4;
+const VERSION = 5;
 const LED_DIR = '/sys/class/leds';
 const NETWATCH = '/tmp/netwatch.log';
 const MAC_RE = /^([0-9a-f]{2}:){5}[0-9a-f]{2}$/;
@@ -1280,8 +1280,16 @@ function uplinkSet(a) {
 				return err('Weight is "auto" or a number.');
 			c.set('junction', a.sec, 'weight', w);
 		}
-		if (a.enabled != null)
+		if (a.enabled != null) {
 			c.set('junction', a.sec, 'enabled', a.enabled ? '1' : '0');
+			// a source Junction made has its own Wi-Fi link: switch that with it
+			let iface = c.get('junction', a.sec, 'iface');
+			if (c.get('junction', a.sec, 'managed') == '1' && c.get('wireless', 'jc_' + iface) == 'wifi-iface') {
+				c.set('wireless', 'jc_' + iface, 'disabled', a.enabled ? '0' : '1');
+				c.commit('wireless');
+				bg('sleep 1; wifi reload');
+			}
+		}
 		if (a.name != null && length(a.name))
 			c.set('junction', a.sec, 'name', a.name);
 		if (a.first) {

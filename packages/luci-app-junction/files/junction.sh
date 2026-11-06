@@ -38,14 +38,15 @@ log() {
 
 N=0
 add_uplink() {
-	local iface name weight en
+	local iface name weight en man
 	config_get iface "$1" iface
 	[ -n "$iface" ] || return 0
 	config_get_bool en "$1" enabled 1
 	config_get name "$1" name "$iface"
 	config_get weight "$1" weight auto
+	config_get_bool man "$1" managed 0
 	N=$((N + 1))
-	eval "IF_$N=\$iface; NAME_$N=\$name; WCFG_$N=\$weight; EN_$N=\$en"
+	eval "IF_$N=\$iface; NAME_$N=\$name; WCFG_$N=\$weight; EN_$N=\$en; SEC_$N=\$1; MAN_$N=\$man"
 }
 
 load_cfg() {
@@ -127,7 +128,19 @@ check() {
 			st=0; reason=off
 		elif [ "$UP" != 1 ] || [ -z "$IP" ] || [ -z "$GW" ]; then
 			st=0; reason=down; h=; oks=0; fails=0
+			eval "man=\$MAN_$i; ds=\$DS_$i"
+			if [ "$man" = 1 ]; then
+				now=$(date +%s)
+				[ -n "$ds" ] || { ds=$now; eval "DS_$i=\$now"; }
+				if [ $((now - ds)) -ge "$GIVEUP" ]; then
+					giveup "$i"
+					en=0; reason="couldn't connect, turned off"
+				else
+					reason="connecting ($((now - ds)) s)"
+				fi
+			fi
 		else
+			eval "DS_$i="
 			ensure_table "$i"
 			probe "$IP"
 			h=$(echo "$h$OK" | sed 's/.*\(..........\)$/\1/')
@@ -157,13 +170,19 @@ check() {
 		fi
 		[ "$st" = 1 ] || eval "R_$i=\$reason"
 		[ "$st" = 1 ] && eval "R_$i="
-		eval "H_$i=\$h; F_$i=\$fails; O_$i=\$oks; L_$i=\$low; ST_$i=\$st"
+		eval "EN_$i=\$en; H_$i=\$h; F_$i=\$fails; O_$i=\$oks; L_$i=\$low; ST_$i=\$st"
 		eval "UP_$i=\$UP; DEV_$i=\$DEV; IP_$i=\$IP; GW_$i=\$GW; SIG_$i=\$SIG; RATE_$i=\$RATE; SSID_$i=\$SSID; RTT_$i=\$RTT"
 		# weight: fixed, or "auto" = link rate (wired counts as 300) scaled down by loss
 		eval "w=\$WCFG_$i"
 		if [ "$w" = auto ] || [ -z "$w" ]; then
-			w=${RATE:-300}
-			[ "$w" -gt 0 ] 2>/dev/null || w=300
+			# signal says more about what a link can carry than the bit rate, which drops when idle
+			if [ -n "$SIG" ]; then
+				w=$((SIG + 100))
+				[ "$w" -gt 60 ] && w=60
+				[ "$w" -lt 5 ] && w=5
+			else
+				w=60
+			fi
 			loss=$(loss_of "$h")
 			w=$(( w * (100 - loss) / 100 ))
 		fi
@@ -171,6 +190,21 @@ check() {
 		eval "W_$i=\$w"
 		i=$((i + 1))
 	done
+}
+
+GIVEUP=90
+# A radio that's trying to join a network it can't reach keeps its own Wi-Fi down while it waits,
+# so a source Junction added that hasn't connected in 90 s is switched off (the app can turn it on again).
+giveup() {
+	local i=$1 iface sec ssid
+	eval "iface=\$IF_$i; sec=\$SEC_$i"
+	ssid=$(uci -q get "wireless.jc_$iface.ssid")
+	uci -q set "wireless.jc_$iface.disabled=1"
+	uci -q set "junction.$sec.enabled=0"
+	uci -q commit wireless
+	uci -q commit junction
+	log "couldn't connect to ${ssid:-$iface} for $GIVEUP s (wrong password, out of range, or not on that radio's band); turned it off so your own Wi-Fi on that radio comes back"
+	( wifi reload ) >/dev/null 2>&1 </dev/null &
 }
 
 # Each source's own table, so pings from its address (and its marked connections) always leave
@@ -394,17 +428,16 @@ add() {
 	[ -n "$enc" ] || { [ -n "$key" ] && enc=psk2 || enc=none; }
 	[ -n "$name" ] || name=$ssid
 
-	uci -q batch <<EOF
-set network.$iface=interface
-set network.$iface.proto=dhcp
-set network.$iface.metric=$((10 * n))
-set wireless.jc_$iface=wifi-iface
-set wireless.jc_$iface.device=$radio
-set wireless.jc_$iface.mode=sta
-set wireless.jc_$iface.network=$iface
-set wireless.jc_$iface.ssid=$ssid
-set wireless.jc_$iface.encryption=$enc
-EOF
+	# one uci call per value, quoted: names like "WE GUCCI" have spaces
+	uci set "network.$iface=interface"
+	uci set "network.$iface.proto=dhcp"
+	uci set "network.$iface.metric=$((10 * n))"
+	uci set "wireless.jc_$iface=wifi-iface"
+	uci set "wireless.jc_$iface.device=$radio"
+	uci set "wireless.jc_$iface.mode=sta"
+	uci set "wireless.jc_$iface.network=$iface"
+	uci set "wireless.jc_$iface.ssid=$ssid"
+	uci set "wireless.jc_$iface.encryption=$enc"
 	[ -n "$key" ] && uci set "wireless.jc_$iface.key=$key"
 	zone=$(wan_zone)
 	[ -n "$zone" ] && uci add_list "firewall.$zone.network=$iface"

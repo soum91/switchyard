@@ -80,7 +80,7 @@ struct SourcesView: View {
                     } header: {
                         Text("Sources")
                     } footer: {
-                        Text("Each radio can hold one source. Whichever radio connects to a source stays on that source's channel, so your own Wi-Fi on that band moves with it.")
+                        Text("Each radio can hold one source. Whichever radio connects to a source stays on that source's channel, so your own Wi-Fi on that band moves with it. A source added here that can't connect within 90 s is switched off, because until it connects that radio's own Wi-Fi stays down.")
                     }
                     settings(d)
                 }
