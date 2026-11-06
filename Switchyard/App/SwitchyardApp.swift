@@ -76,7 +76,7 @@ struct AsusTab: View {
     @EnvironmentObject var store: AppStore
     var body: some View {
         if let m = store.asus {
-            RouterDashboard(model: m, title: "ASUS") { store.setAsus(nil) }
+            RouterDashboard(model: m, title: "ASUS", onForget: { store.setAsus(nil) }, onSignIn: { store.setAsus(nil) })
         } else {
             AsusSetupView { store.setAsus($0) }
         }

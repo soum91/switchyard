@@ -7,6 +7,8 @@ struct RouterDashboard: View {
     var onForget: (() -> Void)?
     /// Extra content under the quick switches (Keystone adds its bridge-only options here).
     var extra: AnyView? = nil
+    /// Shown when the router turns down the saved login.
+    var onSignIn: (() -> Void)? = nil
 
     var body: some View {
         ScrollView {
@@ -44,7 +46,10 @@ struct RouterDashboard: View {
     private func errorCard(_ e: String) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             CardTitle(text: "Can't reach the router", icon: "exclamationmark.triangle")
-            Text(e).font(.subheadline)
+            Text(Self.explain(e)).font(.subheadline)
+            if Self.loginRejected(e), let onSignIn {
+                Button("Sign in again", action: onSignIn).buttonStyle(.borderedProminent)
+            }
             if model.notInstalled {
                 Text("Run this on the router over SSH (one line), then pull to refresh:")
                     .font(.footnote).foregroundStyle(.secondary)
@@ -54,6 +59,14 @@ struct RouterDashboard: View {
                 .buttonStyle(.bordered)
         }
         .card()
+    }
+
+    static func loginRejected(_ e: String) -> Bool {
+        e.contains("router login 6") || e.contains("didn't accept that password") || e.contains("refused switchyard")
+    }
+
+    static func explain(_ e: String) -> String {
+        loginRejected(e) ? "The router turned down the saved login. Sign in again with the root password (on home Wi-Fi) and it'll get its own login that nothing else can replace." : e
     }
 
     private func overview(_ s: RStatus) -> some View {

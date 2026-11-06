@@ -137,11 +137,15 @@ final class DirectLink: SwitchyardLink {
 enum RouterSetup {
     struct Creds: Codable, Equatable { var host: String; var user: String; var pass: String }
 
-    static func provision(host: String, rootPassword: String) async throws -> Creds {
+    /// `name` is the app's own login on the router: "switchyard" for the Switchyard app, "keystone" for the bridge.
+    static func provision(host: String, rootPassword: String, name: String = "switchyard") async throws -> Creds {
         let root = UbusClient(host: host, user: "root", pass: rootPassword)
         try await root.login()
-        _ = try await root.call("switchyard", "version")
-        let r = try await root.call("switchyard", "setup")
+        let v = try await root.call("switchyard", "version")
+        if name != "switchyard", (v["v"] as? Int ?? 1) < 3 {
+            throw RouterError.message("The router plugin is out of date. Run the install command on the router again, then try again.")
+        }
+        let r = try await root.call("switchyard", "setup", ["name": name])
         if let e = r["error"] as? String { throw RouterError.message(e) }
         guard let u = r["user"] as? String, let p = r["pass"] as? String else { throw RouterError.message("The router didn't hand out a login.") }
         // Make sure the new login works before keeping it.

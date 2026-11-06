@@ -6,7 +6,7 @@
 import { readfile, writefile, popen, lsdir, access, unlink, rename, mkdir } from 'fs';
 import { cursor } from 'uci';
 
-const VERSION = 2;
+const VERSION = 3;
 const LED_DIR = '/sys/class/leds';
 const NETWATCH = '/tmp/netwatch.log';
 const MAC_RE = /^([0-9a-f]{2}:){5}[0-9a-f]{2}$/;
@@ -1137,7 +1137,12 @@ function checkUpgrades() {
 }
 
 // Creates (or renews) a login that can only use this object, so the apps never keep the root password.
-function setup() {
+// Each app gets its own login ("switchyard" for the Switchyard app, "keystone" for the Keystone bridge),
+// so setting one up never breaks the other.
+function setup(a) {
+	let name = a.name || 'switchyard';
+	if (name != 'switchyard' && name != 'keystone')
+		return err('Unknown login name.');
 	let c = cursor();
 	let pw = substr(trim(sh('head -c 64 /dev/urandom | md5sum')), 0, 32);
 	if (length(pw) < 32)
@@ -1149,18 +1154,19 @@ function setup() {
 		return err("Couldn't hash the password (uhttpd -m).");
 	let old = [];
 	c.foreach('rpcd', 'login', function(s) {
-		if (s.username == 'switchyard')
+		if (s.username == name)
 			push(old, s['.name']);
 	});
 	for (let i = 0; i < length(old); i++)
 		c.delete('rpcd', old[i]);
 	let s = c.add('rpcd', 'login');
-	c.set('rpcd', s, 'username', 'switchyard');
+	c.set('rpcd', s, 'username', name);
 	c.set('rpcd', s, 'password', hash);
 	c.set('rpcd', s, 'read', [ 'switchyard' ]);
 	c.set('rpcd', s, 'write', [ 'switchyard' ]);
 	c.commit('rpcd');
-	return { ok: true, user: 'switchyard', pass: pw };
+	system('logger -t switchyard ' + shq('new login for ' + name));
+	return { ok: true, user: name, pass: pw };
 }
 
 // Lets a device on the upstream network (the bridge) reach this router's web API.
@@ -1233,7 +1239,7 @@ return {
 		sys: { call: wrap((a) => sysinfo()) },
 		upgrades: { call: wrap((a) => checkUpgrades()) },
 		reboot: { call: wrap((a) => reboot()) },
-		setup: { call: wrap((a) => setup()) },
+		setup: { args: { name: 'name' }, call: wrap(setup) },
 		allow: { args: { ip: 'ip' }, call: wrap(allow) }
 	}
 };
