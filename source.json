@@ -20,6 +20,15 @@
       "screenshotURLs": [],
       "versions": [
         {
+          "version": "1.0.0.10",
+          "buildVersion": "10",
+          "date": "2026-11-06T21:02:01Z",
+          "localizedDescription": "- Enforce visible installed version/build across app releases (c21e977)\n- Packages CI: publish the build log without stashing the SDK (3c4be91)",
+          "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-10/Switchyard-1.0.0-build-10.ipa",
+          "size": 799062,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "1.0.0.9",
           "buildVersion": "9",
           "date": "2026-11-06T20:18:14Z",
@@ -101,11 +110,11 @@
           "minOSVersion": "17.0"
         }
       ],
-      "version": "1.0.0.9",
-      "versionDate": "2026-11-06T20:18:14Z",
-      "versionDescription": "- Junction: make its route choice actually win; count Junction sources on the dashboard (cc66ba8)",
-      "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-9/Switchyard-1.0.0-build-9.ipa",
-      "size": 799067,
+      "version": "1.0.0.10",
+      "versionDate": "2026-11-06T21:02:01Z",
+      "versionDescription": "- Enforce visible installed version/build across app releases (c21e977)\n- Packages CI: publish the build log without stashing the SDK (3c4be91)",
+      "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-10/Switchyard-1.0.0-build-10.ipa",
+      "size": 799062,
       "appPermissions": {}
     }
   ],
