@@ -7,7 +7,7 @@ struct RStatus: Decodable, Equatable {
     struct Addr: Decodable, Equatable { var ip: String?; var mask: Int? }
     struct Up: Decodable, Equatable {
         var iface: String?; var dev: String?; var ip: String?; var mask: Int?; var gw: String?
-        var ssid: String?; var signal: Int?; var rate: Double?; var rx: Double?; var tx: Double?
+        var ssid: String?; var signal: Int?; var rate: Double?; var rx: Double?; var tx: Double?; var n: Int?
     }
     struct Warp: Decodable, Equatable { var iface: String?; var up: Bool?; var route: Bool?; var hs: Int?; var auto: Bool? }
     struct Adblock: Decodable, Equatable {

@@ -6,7 +6,7 @@
 import { readfile, writefile, popen, lsdir, access, unlink, rename, mkdir } from 'fs';
 import { cursor } from 'uci';
 
-const VERSION = 3;
+const VERSION = 4;
 const LED_DIR = '/sys/class/leds';
 const NETWATCH = '/tmp/netwatch.log';
 const MAC_RE = /^([0-9a-f]{2}:){5}[0-9a-f]{2}$/;
@@ -656,8 +656,25 @@ function status() {
 			up.signal = w.signal;
 			up.rate = w.bitrate;
 		}
-		up.rx = num(readTrim('/sys/class/net/' + up.dev + '/statistics/rx_bytes'));
-		up.tx = num(readTrim('/sys/class/net/' + up.dev + '/statistics/tx_bytes'));
+		// traffic over every upstream (with Junction there can be several)
+		up.rx = 0;
+		up.tx = 0;
+		up.n = 0;
+		for (let i = 0; i < length(dump); i++) {
+			let it = dump[i];
+			if (!it.up || it.proto == 'wireguard' || it.interface == 'lan' || it.interface == 'loopback')
+				continue;
+			let dr = false;
+			for (let r in (it.route || []))
+				if (r.target == '0.0.0.0' && r.mask == 0)
+					dr = true;
+			let dev = it.l3_device || it.device;
+			if (!dr || !dev)
+				continue;
+			up.rx += num(readTrim('/sys/class/net/' + dev + '/statistics/rx_bytes'));
+			up.tx += num(readTrim('/sys/class/net/' + dev + '/statistics/tx_bytes'));
+			up.n++;
+		}
 		res.up = up;
 	}
 
@@ -1028,6 +1045,8 @@ function logs(a) {
 		out = lines(sh('logread -l ' + n));
 	else if (kind == 'kernel')
 		out = tail(lines(sh('dmesg')), n);
+	else if (kind == 'junction')
+		out = tail(lines(readfile('/tmp/junction.log')), n);
 	else
 		out = tail(lines(readfile(NETWATCH)), n);
 	return { kind: kind, lines: out };
@@ -1202,6 +1221,108 @@ function reboot() {
 	return { ok: true };
 }
 
+// ---------------------------------------------------------------------------------------------
+// Junction (several internet sources)
+
+function hasJunction() {
+	return access('/usr/sbin/junction') ? true : false;
+}
+
+function uplinks() {
+	if (!hasJunction())
+		return { installed: false };
+	let st = js('/usr/sbin/junction status') || {};
+	st.installed = true;
+	let c = cursor();
+	let cfg = [];
+	c.foreach('junction', 'uplink', function(s) {
+		push(cfg, { sec: s['.name'], iface: s.iface, name: s.name, weight: s.weight || 'auto', enabled: s.enabled != '0', managed: s.managed == '1' });
+	});
+	st.cfg = cfg;
+	st.on = c.get('junction', 'main', 'enabled') != '0';
+	// which radios are free for another source
+	let radios = [];
+	c.foreach('wireless', 'wifi-device', function(r) {
+		let busy = null;
+		c.foreach('wireless', 'wifi-iface', function(i) {
+			if (i.device == r['.name'] && i.mode == 'sta' && i.disabled != '1')
+				busy = i.ssid;
+		});
+		push(radios, { sec: r['.name'], band: r.band, busy: busy });
+	});
+	st.radios = radios;
+	return st;
+}
+
+function uplinkSet(a) {
+	if (!hasJunction())
+		return err('Junction isn\'t installed on the router.');
+	let c = cursor();
+	if (a.on != null)
+		c.set('junction', 'main', 'enabled', a.on ? '1' : '0');
+	if (a.mode != null) {
+		if (a.mode != 'balance' && a.mode != 'failover')
+			return err('Unknown mode.');
+		c.set('junction', 'main', 'mode', a.mode);
+	}
+	if (a.min_signal != null) {
+		let v = num(a.min_signal);
+		if (v > -40 || v < -100)
+			return err('Signal floor has to be between -100 and -40 dBm.');
+		c.set('junction', 'main', 'min_signal', '' + v);
+	}
+	if (a.sec) {
+		if (c.get('junction', a.sec) != 'uplink')
+			return err('No such source.');
+		if (a.weight != null) {
+			let w = '' + a.weight;
+			if (w != 'auto' && !match(w, /^[0-9]{1,3}$/))
+				return err('Weight is "auto" or a number.');
+			c.set('junction', a.sec, 'weight', w);
+		}
+		if (a.enabled != null)
+			c.set('junction', a.sec, 'enabled', a.enabled ? '1' : '0');
+		if (a.name != null && length(a.name))
+			c.set('junction', a.sec, 'name', a.name);
+		if (a.first) {
+			// failover order is the order of the sections: move this one to the top
+			c.reorder('junction', a.sec, 1);
+		}
+	}
+	c.commit('junction');
+	bg('sleep 1; /etc/init.d/junction restart');
+	return { ok: true };
+}
+
+function uplinkAdd(a) {
+	if (!hasJunction())
+		return err('Junction isn\'t installed on the router.');
+	if (!a.radio || !match(a.radio, /^[A-Za-z0-9_]+$/))
+		return err('Pick a radio.');
+	if (!a.ssid || length(a.ssid) > 32)
+		return err('Pick a network.');
+	if (a.key && (length(a.key) < 8 || length(a.key) > 63))
+		return err('Wi-Fi passwords are 8 to 63 characters.');
+	let enc = a.enc || '';
+	if (length(enc) && !match(enc, /^(none|psk2|psk-mixed|sae|sae-mixed)$/))
+		return err('Unsupported security type.');
+	let out = sh('/usr/sbin/junction add ' + shq(a.radio) + ' ' + shq(a.ssid) + ' ' + shq(a.key || '') + ' ' + shq(a.name || '') + ' ' + shq(enc));
+	let r = null;
+	try { r = json(trim(out)); } catch (e) { r = null; }
+	return r ? r : err('Junction didn\'t answer: ' + trim(out));
+}
+
+function uplinkRemove(a) {
+	if (!hasJunction())
+		return err('Junction isn\'t installed on the router.');
+	if (!a.iface || !match(a.iface, /^[A-Za-z0-9_]+$/))
+		return err('Pick a source.');
+	let out = sh('/usr/sbin/junction remove ' + shq(a.iface));
+	let r = null;
+	try { r = json(trim(out)); } catch (e) { r = null; }
+	return r ? r : err('Junction didn\'t answer: ' + trim(out));
+}
+
 function wrap(fn) {
 	return function(req) {
 		try {
@@ -1239,6 +1360,10 @@ return {
 		sys: { call: wrap((a) => sysinfo()) },
 		upgrades: { call: wrap((a) => checkUpgrades()) },
 		reboot: { call: wrap((a) => reboot()) },
+		uplinks: { call: wrap((a) => uplinks()) },
+		uplink_set: { args: { on: true, mode: 'mode', min_signal: 0, sec: 'sec', weight: 'weight', enabled: true, name: 'name', first: true }, call: wrap(uplinkSet) },
+		uplink_add: { args: { radio: 'radio', ssid: 'ssid', key: 'key', name: 'name', enc: 'enc' }, call: wrap(uplinkAdd) },
+		uplink_remove: { args: { iface: 'iface' }, call: wrap(uplinkRemove) },
 		setup: { args: { name: 'name' }, call: wrap(setup) },
 		allow: { args: { ip: 'ip' }, call: wrap(allow) }
 	}

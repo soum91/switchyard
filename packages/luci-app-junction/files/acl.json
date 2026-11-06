@@ -1,0 +1,15 @@
+{
+	"luci-app-junction": {
+		"description": "Junction (several internet sources)",
+		"read": {
+			"uci": [ "junction", "network", "wireless" ],
+			"file": {
+				"/usr/sbin/junction status": [ "exec" ],
+				"/tmp/junction.log": [ "read" ]
+			}
+		},
+		"write": {
+			"uci": [ "junction" ]
+		}
+	}
+}

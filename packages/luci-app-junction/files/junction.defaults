@@ -1,0 +1,34 @@
+#!/bin/sh
+# First install: every upstream interface that exists becomes a source.
+if ! uci -q show junction | grep -q '=uplink'; then
+	for i in $(uci -q show network | sed -n 's/^network\.\([^.=]*\)=interface$/\1/p'); do
+		case "$i" in
+			wan|wwan|wwan[0-9]*) ;;
+			*) continue ;;
+		esac
+		proto=$(uci -q get "network.$i.proto")
+		[ "$proto" = dhcp ] || [ "$proto" = static ] || [ "$proto" = pppoe ] || continue
+		name=$i
+		for s in $(uci -q show wireless | sed -n 's/^wireless\.\([^.=]*\)=wifi-iface$/\1/p'); do
+			[ "$(uci -q get "wireless.$s.network")" = "$i" ] && [ "$(uci -q get "wireless.$s.mode")" = sta ] && name=$(uci -q get "wireless.$s.ssid")
+		done
+		[ "$i" = wan ] && [ -z "$(uci -q get network.wan.device)" ] && continue
+		sec=$(uci add junction uplink)
+		uci set "junction.$sec.iface=$i"
+		uci set "junction.$sec.name=$name"
+	done
+	uci commit junction
+fi
+# WARP (a WireGuard default route) would pull everything back into one tunnel over one source.
+for i in $(uci -q show network | sed -n 's/^network\.\([^.=]*\)\.proto=.wireguard.$/\1/p'); do
+	if [ "$(uci -q get "network.$i.auto")" != 0 ]; then
+		uci set "network.$i.auto=0"
+		uci commit network
+		ifdown "$i" 2>/dev/null
+		ip route del default dev "$i" 2>/dev/null
+		echo "$(date '+%Y-%m-%d %H:%M:%S') turned off $i (WARP) so traffic can use every source" >> /tmp/junction.log
+	fi
+done
+/etc/init.d/junction enable
+/etc/init.d/junction restart
+exit 0

@@ -103,7 +103,7 @@ struct RouterDashboard: View {
                     }
                     Spacer()
                     VStack(alignment: .trailing, spacing: 2) {
-                        Text(u.ssid.map { "via \($0)" } ?? "via \(u.iface ?? "wan")").font(.subheadline.weight(.medium))
+                        Text((u.n ?? 0) > 1 ? "via \(u.n ?? 0) sources" : u.ssid.map { "via \($0)" } ?? "via \(u.iface ?? "wan")").font(.subheadline.weight(.medium))
                         Text(u.ip ?? "–").font(.caption.monospaced()).foregroundStyle(.secondary)
                         if let sig = u.signal { Text("\(sig) dBm").font(.caption).foregroundStyle(.secondary) }
                     }
@@ -161,6 +161,7 @@ struct RouterDashboard: View {
 
     private func pages(_ s: RStatus) -> some View {
         VStack(spacing: 0) {
+            nav("Internet sources", "point.3.connected.trianglepath.dotted", (s.up?.n ?? 0) > 1 ? "\(s.up?.n ?? 0) in use" : nil) { SourcesView(model: model) }
             nav("Devices", "laptopcomputer.and.iphone", s.clients.map { "\($0) online" }) { ClientsView(model: model) }
             nav("Blocked sites", "nosign", nil) { BlockingView(model: model) }
             nav("Wi-Fi", "wifi", s.guest?.on == true ? "Guest on" : nil) { WifiView(model: model) }

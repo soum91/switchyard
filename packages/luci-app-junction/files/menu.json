@@ -1,0 +1,14 @@
+{
+	"admin/network/junction": {
+		"title": "Junction",
+		"order": 65,
+		"action": {
+			"type": "view",
+			"path": "junction"
+		},
+		"depends": {
+			"acl": [ "luci-app-junction" ],
+			"uci": { "junction": true }
+		}
+	}
+}

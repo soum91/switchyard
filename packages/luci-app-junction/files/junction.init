@@ -1,0 +1,25 @@
+#!/bin/sh /etc/rc.common
+# Junction: several upstream connections at once.
+START=99
+USE_PROCD=1
+
+start_service() {
+	config_load junction
+	config_get_bool enabled main enabled 1
+	if [ "$enabled" != 1 ]; then
+		/usr/sbin/junction cleanup
+		return 0
+	fi
+	procd_open_instance
+	procd_set_param command /usr/sbin/junction run
+	procd_set_param respawn 3600 5 0
+	procd_close_instance
+}
+
+stop_service() {
+	/usr/sbin/junction cleanup
+}
+
+service_triggers() {
+	procd_add_reload_trigger junction
+}

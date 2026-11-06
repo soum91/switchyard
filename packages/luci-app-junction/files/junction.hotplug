@@ -1,0 +1,2 @@
+# A link went up or down: check right away instead of waiting for the next round.
+case "$ACTION" in ifup|ifdown|ifupdate) /usr/sbin/junction check ;; esac

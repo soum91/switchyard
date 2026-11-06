@@ -12,19 +12,42 @@ permissions:
 env:
   OPENWRT: "25.12.5"
   TARGET: mediatek/filogic
-  PKG: luci-app-lightsout
   BUILD: ${{ github.run_number }}
-  TAG: lightsout-build-${{ github.run_number }}
 
 jobs:
   build:
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - pkg: luci-app-lightsout
+            short: lightsout
+            title: Lights Out
+          - pkg: luci-app-junction
+            short: junction
+            title: Junction
+    env:
+      PKG: ${{ matrix.pkg }}
+      TAG: ${{ matrix.short }}-build-${{ github.run_number }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
+      - name: Did this package change?
+        id: changed
+        run: |
+          if [ "${{ github.event_name }}" = workflow_dispatch ] || \
+             git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" 2>/dev/null | grep -qE "^packages/$PKG/|^.github/workflows/packages.yml"; then
+            echo "go=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "go=0" >> "$GITHUB_OUTPUT"
+            echo "No changes in $PKG, skipping."
+          fi
+
       - name: Get the OpenWrt SDK
+        if: steps.changed.outputs.go == '1'
         run: |
           sudo apt-get -qq update && sudo apt-get -qq install -y zstd rsync gawk >/dev/null
           BASE="https://downloads.openwrt.org/releases/$OPENWRT/targets/$TARGET"
@@ -36,6 +59,7 @@ jobs:
           tar -xf sdk.* -C sdk --strip-components=1
 
       - name: Build
+        if: steps.changed.outputs.go == '1'
         run: |
           set -o pipefail
           cp -r "packages/$PKG" sdk/package/
@@ -54,30 +78,32 @@ jobs:
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
 
       - name: Publish build log
-        if: always()
+        if: always() && steps.changed.outputs.go == '1'
         run: |
           git config user.name "ci"
           git config user.email "ci@users.noreply.github.com"
-          tail -n 300 build.log > ci-packages.log 2>/dev/null || echo "no build.log" > ci-packages.log
+          tail -n 300 build.log > ci-$PKG.log 2>/dev/null || echo "no build.log" > ci-$PKG.log
           git stash -u -q || true
-          git checkout -q -B ci-logs-packages
+          git checkout -q -B ci-logs-${{ matrix.short }}
           git stash pop -q || true
-          git add -f ci-packages.log
+          git add -f ci-$PKG.log
           git commit -qm "Packages CI log for ${GITHUB_SHA}" || true
-          git push -qf origin ci-logs-packages
+          git push -qf origin ci-logs-${{ matrix.short }}
 
       - name: Changelog
+        if: steps.changed.outputs.go == '1'
         run: |
-          .github/scripts/release-notes.sh "Lights Out ($PKG)" "$VERSION" "$BUILD" 'lightsout-build-*' "$TAG" \
+          .github/scripts/release-notes.sh "${{ matrix.title }} ($PKG)" "$VERSION" "$BUILD" '${{ matrix.short }}-build-*' "$TAG" \
             "OpenWrt $OPENWRT package. Install on the router: wget -qO- https://raw.githubusercontent.com/soum91/switchyard/main/packages/$PKG/install.sh | sh" > notes.md
           cat notes.md
 
       - name: Publish release
+        if: steps.changed.outputs.go == '1'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.TAG }}
           target_commitish: ${{ github.sha }}
-          name: Lights Out ${{ env.VERSION }} build ${{ env.BUILD }}
+          name: ${{ matrix.title }} ${{ env.VERSION }} build ${{ env.BUILD }}
           body_path: notes.md
           files: ${{ env.FILE }}
           make_latest: false

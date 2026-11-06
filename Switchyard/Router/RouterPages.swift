@@ -574,6 +574,7 @@ struct DiagnosticsView: View {
                     Text("Drops").tag("netwatch")
                     Text("System").tag("system")
                     Text("Kernel").tag("kernel")
+                    Text("Sources").tag("junction")
                 }
                 .pickerStyle(.segmented)
                 if loadingLogs { ProgressView() }
