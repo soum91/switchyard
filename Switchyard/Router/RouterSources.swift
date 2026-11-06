@@ -244,7 +244,7 @@ struct SourceEditor: View {
                 }
                 if mode == "balance" {
                     Section {
-                        Toggle("Weight from link speed", isOn: $auto)
+                        Toggle("Automatic weight", isOn: $auto)
                         if !auto {
                             HStack {
                                 Slider(value: $weight, in: 1 ... 100, step: 1)
@@ -252,7 +252,7 @@ struct SourceEditor: View {
                             }
                         }
                     } footer: {
-                        Text("Shares are worked out between the working sources, e.g. 70 and 30. Automatic uses each link's current rate.")
+                        Text("Shares are worked out between the working sources, e.g. 70 and 30. Automatic follows each link's signal strength and packet loss.")
                     }
                 } else {
                     Section {

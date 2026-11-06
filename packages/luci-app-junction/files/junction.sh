@@ -366,9 +366,32 @@ cleanup() {
 	rm -f "$STATUS" "$PIDFILE"
 }
 
+# OpenWrt gives an upstream with no metric the top-priority default route (metric 0), which would
+# beat Junction's own (metric 1) and carry everything. Give every upstream a metric once.
+ensure_metrics() {
+	local i m n=1 changed=
+	for i in $(uci -q show network | sed -n 's/^network\.\([^.=]*\)=interface$/\1/p'); do
+		case "$i" in wan|wwan|wwan[0-9]*) ;; *) continue ;; esac
+		m=$(uci -q get "network.$i.metric")
+		if [ -z "$m" ] || [ "$m" = 0 ]; then
+			while uci -q show network | grep -q "\.metric='$((10 * n))'"; do n=$((n + 1)); done
+			uci set "network.$i.metric=$((10 * n))"
+			changed=1
+			n=$((n + 1))
+		fi
+	done
+	if [ -n "$changed" ]; then
+		uci commit network
+		log "gave the upstream interfaces route metrics so Junction's choice takes effect"
+		/etc/init.d/network reload
+		sleep 5
+	fi
+}
+
 run() {
 	load_cfg
 	[ "$ENABLED" = 1 ] || { cleanup; exit 0; }
+	ensure_metrics
 	echo $$ > "$PIDFILE"
 	trap 'cleanup; exit 0' TERM INT
 	trap 'kill $SLEEPER 2>/dev/null' USR1

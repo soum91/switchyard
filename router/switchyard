@@ -6,7 +6,7 @@
 import { readfile, writefile, popen, lsdir, access, unlink, rename, mkdir } from 'fs';
 import { cursor } from 'uci';
 
-const VERSION = 5;
+const VERSION = 6;
 const LED_DIR = '/sys/class/leds';
 const NETWATCH = '/tmp/netwatch.log';
 const MAC_RE = /^([0-9a-f]{2}:){5}[0-9a-f]{2}$/;
@@ -675,6 +675,17 @@ function status() {
 			up.tx += num(readTrim('/sys/class/net/' + dev + '/statistics/tx_bytes'));
 			up.n++;
 		}
+		// with Junction, count its working sources rather than every link that has a route
+		if (access('/usr/sbin/junction')) {
+			let jst = js('/usr/sbin/junction status');
+			if (jst && jst.enabled && jst.uplinks) {
+				let k = 0;
+				for (let u in jst.uplinks)
+					if (u.healthy)
+						k++;
+				up.n = k;
+			}
+		}
 		res.up = up;
 	}
 
@@ -1090,6 +1101,23 @@ function scan(a) {
 	return { radio: a.radio, nets: length(out) > 50 ? slice(out, 0, 50) : out };
 }
 
+function kick(a) {
+	let mac = lc(a.mac || '');
+	if (!match(mac, MAC_RE))
+		return err('Bad MAC address.');
+	let ban = a.ban ? a.ban : 30000;
+	let ifs = wifiIfaces(wirelessStatus());
+	let hit = 0;
+	for (let i = 0; i < length(ifs); i++) {
+		if (ifs[i].mode != 'ap' || !ifs[i].ifname)
+			continue;
+		let r = system("ubus call hostapd." + ifs[i].ifname + " del_client '{\"addr\":\"" + mac + "\",\"reason\":5,\"deauth\":true,\"ban_time\":" + ban + "}' >/dev/null 2>&1");
+		if (r == 0)
+			hit++;
+	}
+	return { ok: true, mac: mac, from: hit };
+}
+
 function block(a) {
 	let mac = lc(a.mac || '');
 	if (!match(mac, MAC_RE))
@@ -1114,22 +1142,6 @@ function block(a) {
 	return { ok: true, mac: mac, blocked: a.on ? true : false };
 }
 
-function kick(a) {
-	let mac = lc(a.mac || '');
-	if (!match(mac, MAC_RE))
-		return err('Bad MAC address.');
-	let ban = a.ban ? a.ban : 30000;
-	let ifs = wifiIfaces(wirelessStatus());
-	let hit = 0;
-	for (let i = 0; i < length(ifs); i++) {
-		if (ifs[i].mode != 'ap' || !ifs[i].ifname)
-			continue;
-		let r = system("ubus call hostapd." + ifs[i].ifname + " del_client '{\"addr\":\"" + mac + "\",\"reason\":5,\"deauth\":true,\"ban_time\":" + ban + "}' >/dev/null 2>&1");
-		if (r == 0)
-			hit++;
-	}
-	return { ok: true, mac: mac, from: hit };
-}
 
 function sysinfo() {
 	let board = js('ubus call system board') || {};
