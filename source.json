@@ -20,6 +20,15 @@
       "screenshotURLs": [],
       "versions": [
         {
+          "version": "1.0.0.5",
+          "buildVersion": "5",
+          "date": "2026-11-06T06:46:51Z",
+          "localizedDescription": "- Separate router logins per app so setting one up doesn't lock the other out (plugin v3) (e17f118)",
+          "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-5/Switchyard-1.0.0-build-5.ipa",
+          "size": 686193,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "1.0.0.4",
           "buildVersion": "4",
           "date": "2026-10-30T19:29:47Z",
@@ -56,11 +65,11 @@
           "minOSVersion": "17.0"
         }
       ],
-      "version": "1.0.0.4",
-      "versionDate": "2026-10-30T19:29:47Z",
-      "versionDescription": "- Router dashboard: room for extra cards (kept in step with Keystone) (8b0c1c0)",
-      "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-4/Switchyard-1.0.0-build-4.ipa",
-      "size": 684269,
+      "version": "1.0.0.5",
+      "versionDate": "2026-11-06T06:46:51Z",
+      "versionDescription": "- Separate router logins per app so setting one up doesn't lock the other out (plugin v3) (e17f118)",
+      "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-5/Switchyard-1.0.0-build-5.ipa",
+      "size": 686193,
       "appPermissions": {}
     }
   ],
