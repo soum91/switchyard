@@ -20,6 +20,15 @@
       "screenshotURLs": [],
       "versions": [
         {
+          "version": "1.0.0.7",
+          "buildVersion": "7",
+          "date": "2026-11-06T19:16:09Z",
+          "localizedDescription": "- Junction: fix sources with spaces in the name, switch off links that never connect (de4b553)",
+          "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-7/Switchyard-1.0.0-build-7.ipa",
+          "size": 795644,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "1.0.0.6",
           "buildVersion": "6",
           "date": "2026-11-06T18:37:16Z",
@@ -74,11 +83,11 @@
           "minOSVersion": "17.0"
         }
       ],
-      "version": "1.0.0.6",
-      "versionDate": "2026-11-06T18:37:16Z",
-      "versionDescription": "- Junction: use several internet sources at once (OpenWrt package + Sources page) (527ef22)",
-      "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-6/Switchyard-1.0.0-build-6.ipa",
-      "size": 796136,
+      "version": "1.0.0.7",
+      "versionDate": "2026-11-06T19:16:09Z",
+      "versionDescription": "- Junction: fix sources with spaces in the name, switch off links that never connect (de4b553)",
+      "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-7/Switchyard-1.0.0-build-7.ipa",
+      "size": 795644,
       "appPermissions": {}
     }
   ],
