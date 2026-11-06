@@ -57,6 +57,15 @@ struct SwitchyardApp: App {
                     .tabItem { Label("ASUS", systemImage: "wifi.router") }
                 NavigationStack { TPLinkTab() }
                     .tabItem { Label("TP-Link", systemImage: "antenna.radiowaves.left.and.right") }
+                NavigationStack {
+                    Form {
+                        Section("About Switchyard") {
+                            LabeledContent("Installed version", value: "\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown") (build \(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "Unknown"))")
+                        }
+                    }
+                    .navigationTitle("About")
+                }
+                .tabItem { Label("About", systemImage: "info.circle") }
             }
             .environmentObject(store)
             .preferredColorScheme(.dark)
