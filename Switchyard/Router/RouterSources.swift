@@ -74,9 +74,7 @@ struct SourcesView: View {
                         ForEach(d.uplinks ?? []) { u in
                             Button { editing = u } label: { row(u, d) }.foregroundStyle(.primary)
                         }
-                        if d.radios?.contains(where: { $0.busy == nil }) == true {
-                            Button { adding = true } label: { Label("Add a source", systemImage: "plus.circle") }
-                        }
+                        Button { adding = true } label: { Label("Add a source", systemImage: "plus.circle") }
                     } header: {
                         Text("Sources")
                     } footer: {
@@ -104,7 +102,7 @@ struct SourcesView: View {
         .onDisappear { poll?.cancel() }
         .overlay(alignment: .bottom) { RouterToast(text: model.toast) }
         .sheet(isPresented: $adding) {
-            AddSourceSheet(model: model, radios: (data?.radios ?? []).filter { $0.busy == nil }) { await load() }
+            AddSourceSheet(model: model, radios: data?.radios ?? []) { await load() }
         }
         .sheet(item: $editing) { u in
             SourceEditor(model: model, link: u, cfg: data?.cfg(for: u.iface), mode: data?.mode ?? "balance") { await load() }
@@ -324,15 +322,26 @@ struct AddSourceSheet: View {
     @State private var name = ""
     @State private var saving = false
 
+    private var free: [RUplinks.Radio] { radios.filter { $0.busy == nil } }
+
     var body: some View {
         NavigationStack {
             Form {
                 Section {
-                    Picker("Radio", selection: $radio) {
-                        ForEach(radios) { r in Text(r.bandLabel).tag(r.sec) }
+                    if free.isEmpty {
+                        Text("Both radios are already connected upstream. Open Wi-Fi, pick the band you want to use, open its Upstream connection and switch it off, then come back here.")
+                            .font(.footnote)
+                    } else {
+                        Picker("Radio", selection: $radio) {
+                            ForEach(free) { r in Text(r.bandLabel).tag(r.sec) }
+                        }
+                    }
+                    ForEach(radios.filter { $0.busy != nil }) { r in
+                        LabeledContent(r.bandLabel, value: "taken by \(r.busy ?? "an upstream")")
+                            .foregroundStyle(.secondary)
                     }
                 } footer: {
-                    Text("Only radios that aren't already connected to a source are listed.")
+                    Text("Each radio can connect to one source. To use a taken radio, switch its Upstream connection off on the Wi-Fi page first.")
                 }
                 Section {
                     Button {
@@ -373,7 +382,7 @@ struct AddSourceSheet: View {
                     }
                 }
             }
-            .onAppear { if radio.isEmpty { radio = radios.first?.sec ?? "" } }
+            .onAppear { if radio.isEmpty { radio = free.first?.sec ?? "" } }
         }
     }
 
