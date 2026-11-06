@@ -20,6 +20,15 @@
       "screenshotURLs": [],
       "versions": [
         {
+          "version": "1.0.0.6",
+          "buildVersion": "6",
+          "date": "2026-11-06T18:37:16Z",
+          "localizedDescription": "- Junction: use several internet sources at once (OpenWrt package + Sources page) (527ef22)",
+          "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-6/Switchyard-1.0.0-build-6.ipa",
+          "size": 796136,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "1.0.0.5",
           "buildVersion": "5",
           "date": "2026-11-06T06:46:51Z",
@@ -65,11 +74,11 @@
           "minOSVersion": "17.0"
         }
       ],
-      "version": "1.0.0.5",
-      "versionDate": "2026-11-06T06:46:51Z",
-      "versionDescription": "- Separate router logins per app so setting one up doesn't lock the other out (plugin v3) (e17f118)",
-      "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-5/Switchyard-1.0.0-build-5.ipa",
-      "size": 686193,
+      "version": "1.0.0.6",
+      "versionDate": "2026-11-06T18:37:16Z",
+      "versionDescription": "- Junction: use several internet sources at once (OpenWrt package + Sources page) (527ef22)",
+      "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-6/Switchyard-1.0.0-build-6.ipa",
+      "size": 796136,
       "appPermissions": {}
     }
   ],
