@@ -17,6 +17,7 @@ env:
 jobs:
   build:
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -82,15 +83,17 @@ jobs:
       - name: Publish build log
         if: always() && steps.changed.outputs.go == '1'
         run: |
+          # in a separate folder, so git never has to look at the unpacked SDK
+          L=$RUNNER_TEMP/logs
+          mkdir -p "$L"
+          tail -n 300 build.log > "$L/ci-$PKG.log" 2>/dev/null || echo "no build.log" > "$L/ci-$PKG.log"
+          cd "$L"
+          git init -q -b ci-logs-${{ matrix.short }}
           git config user.name "ci"
           git config user.email "ci@users.noreply.github.com"
-          tail -n 300 build.log > ci-$PKG.log 2>/dev/null || echo "no build.log" > ci-$PKG.log
-          git stash -u -q || true
-          git checkout -q -B ci-logs-${{ matrix.short }}
-          git stash pop -q || true
-          git add -f ci-$PKG.log
-          git commit -qm "Packages CI log for ${GITHUB_SHA}" || true
-          git push -qf origin ci-logs-${{ matrix.short }}
+          git add "ci-$PKG.log"
+          git commit -qm "Packages CI log for ${GITHUB_SHA}"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" HEAD:ci-logs-${{ matrix.short }}
 
       - name: Changelog
         if: steps.changed.outputs.go == '1'
