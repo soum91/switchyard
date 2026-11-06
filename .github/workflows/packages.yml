@@ -63,6 +63,8 @@ jobs:
         run: |
           set -o pipefail
           cp -r "packages/$PKG" sdk/package/
+          # every build gets its own release number, so apk sees it as an upgrade
+          sed -i "s/^PKG_RELEASE:=.*/PKG_RELEASE:=$BUILD/" "sdk/package/$PKG/Makefile"
           cd sdk
           make defconfig >/dev/null
           echo "CONFIG_PACKAGE_$PKG=m" >> .config
