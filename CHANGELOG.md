@@ -1,5 +1,13 @@
 # Changelog
 
+## [build-15] - 2026-11-10
+
+## Verified changes since build-14
+
+- TP-Link diagnosis: trace both login names, follow lazy-loaded UI chunks, include request code ([`fd8fc783`](https://github.com/soum91/switchyard/commit/fd8fc78304eac853fd9048ab9308250048118c03); `Switchyard/TPLink/TPLinkClient.swift`)
+
+[Inspect exact code changes](https://github.com/soum91/switchyard/compare/build-14...build-15)
+
 ## [build-14] - 2026-11-10
 
 ## Verified changes since build-13
