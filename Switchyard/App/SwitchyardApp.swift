@@ -28,7 +28,7 @@ final class AppStore: ObservableObject {
         asus?.stop()
         tplink?.stop()
         asus = asusCreds.map { RouterModel(link: DirectLink(UbusClient(host: $0.host, user: $0.user, pass: $0.pass))) }
-        tplink = tpCreds.map { TPLinkModel(host: $0.host, password: $0.password, username: $0.username) }
+        tplink = tpCreds.flatMap { $0.web == true ? nil : TPLinkModel(host: $0.host, password: $0.password, username: $0.username) }
         if active { start() }
     }
 
@@ -95,8 +95,11 @@ struct AsusTab: View {
 struct TPLinkTab: View {
     @EnvironmentObject var store: AppStore
     var body: some View {
-        if let m = store.tplink {
-            TPLinkDashboard(model: m) { store.setTP(nil) }
+        if let c = store.tpCreds, c.web == true {
+            TPWebDashboard(host: c.host) { store.setTP(nil) }
+        } else if let m = store.tplink, let c = store.tpCreds {
+            TPLinkDashboard(model: m, onForget: { store.setTP(nil) },
+                            onUseWeb: { store.setTP(TPCreds(host: c.host, password: "", web: true)) })
         } else {
             TPSetupView { store.setTP($0) }
         }

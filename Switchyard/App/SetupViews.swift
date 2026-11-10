@@ -62,6 +62,7 @@ struct AsusSetupView: View {
 struct TPSetupView: View {
     let done: (TPCreds) -> Void
     @State private var host = "192.168.0.1"
+    @State private var archer = false
     @State private var username = ""
     @State private var password = ""
     @State private var working = false
@@ -70,17 +71,20 @@ struct TPSetupView: View {
     var body: some View {
         Form {
             Section {
-                Text("Uses the TP-Link's own web login (the password you use at its admin page). Only one session at a time is allowed, so if the web page is open somewhere, log out there first.")
-                    .font(.subheadline).foregroundStyle(.secondary)
-            }
-            Section {
                 TextField("Address", text: $host)
                     .keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
-                TextField("Account name (if it has one)", text: $username)
-                    .textInputAutocapitalization(.never).autocorrectionDisabled()
-                SecureField("Admin password", text: $password)
+            } header: { Text("Router") } footer: {
+                Text("Opens the TP-Link's own page here. It asks for its account name and password itself, and everything it has works.")
+            }
+            Section {
+                Toggle("Switchyard's own dashboard (Archer only)", isOn: $archer)
+                if archer {
+                    TextField("Account name (if it has one)", text: $username)
+                        .textInputAutocapitalization(.never).autocorrectionDisabled()
+                    SecureField("Admin password", text: $password)
+                }
             } footer: {
-                Text("Newer TP-Links (like the TL-WR1502X) sign you in with an account name as well as the password. Leave it empty for Archers that only ask for a password.")
+                if archer { Text("Works with Archer routers like the AX10/AX1500. Travel routers like the TL-WR1502X use the router's own page instead.") }
             }
             if let error {
                 Section { Text(error).foregroundStyle(Theme.bad).font(.footnote) }
@@ -91,7 +95,7 @@ struct TPSetupView: View {
                 } label: {
                     HStack { Text("Connect"); if working { Spacer(); ProgressView() } }
                 }
-                .disabled(working || host.isEmpty || password.isEmpty)
+                .disabled(working || host.isEmpty || (archer && password.isEmpty))
             }
         }
         .scrollContentBackground(.hidden)
@@ -100,15 +104,20 @@ struct TPSetupView: View {
     }
 
     private func connect() async {
+        let h = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard archer else {
+            done(TPCreds(host: h, password: "", web: true))
+            return
+        }
         working = true
         defer { working = false }
         error = nil
-        let c = TPLinkClient(host: host, password: password, username: username)
+        let c = TPLinkClient(host: h, password: password, username: username)
         do {
             try await c.login()
-            _ = try? await c.status()   // repeater-mode firmware may not have every status page
+            _ = try await c.status()
             await c.logout()
-            done(TPCreds(host: host, password: password, username: username.isEmpty ? nil : username))
+            done(TPCreds(host: h, password: password, username: username.isEmpty ? nil : username))
         } catch {
             self.error = error.localizedDescription
         }

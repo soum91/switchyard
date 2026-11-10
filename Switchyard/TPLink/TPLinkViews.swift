@@ -86,6 +86,7 @@ final class TPLinkModel: ObservableObject {
 struct TPLinkDashboard: View {
     @ObservedObject var model: TPLinkModel
     var onForget: () -> Void
+    var onUseWeb: () -> Void = {}
     @State private var editing: TPWifi?
     @State private var confirmReboot = false
 
@@ -96,7 +97,10 @@ struct TPLinkDashboard: View {
                     VStack(alignment: .leading, spacing: 10) {
                         CardTitle(text: "Can't reach the TP-Link", icon: "exclamationmark.triangle")
                         Text(e).font(.subheadline)
-                        Button("Try again") { Task { await model.refresh() } }.buttonStyle(.bordered)
+                        HStack {
+                            Button("Use the router's own page") { onUseWeb() }.buttonStyle(.borderedProminent)
+                            Button("Try again") { Task { await model.refresh() } }.buttonStyle(.bordered)
+                        }
                     }
                     .card()
                 }
@@ -122,6 +126,7 @@ struct TPLinkDashboard: View {
                 Menu {
                     Button { Task { await model.diagnose() } } label: { Label("Diagnose this router", systemImage: "stethoscope") }
                         .disabled(model.diagnosing != nil)
+                    Button { onUseWeb() } label: { Label("Use the router's own page", systemImage: "safari") }
                     Button("Forget this router", role: .destructive, action: onForget)
                 } label: { Image(systemName: "ellipsis.circle") }
             }

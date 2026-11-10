@@ -31,4 +31,4 @@ enum Vault {
     }
 }
 
-struct TPCreds: Codable, Equatable { var host: String; var password: String; var username: String? = nil }
+struct TPCreds: Codable, Equatable { var host: String; var password: String; var username: String? = nil; var web: Bool? = nil }
