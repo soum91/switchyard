@@ -101,7 +101,7 @@ struct TPSetupView: View {
         let c = TPLinkClient(host: host, password: password)
         do {
             try await c.login()
-            _ = try await c.status()
+            _ = try? await c.status()   // repeater-mode firmware may not have every status page
             await c.logout()
             done(TPCreds(host: host, password: password))
         } catch {

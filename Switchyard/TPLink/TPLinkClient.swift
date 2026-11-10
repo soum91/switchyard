@@ -7,7 +7,7 @@ import Foundation
 final class TPLinkClient {
     let host: String
     let password: String
-    let username = "admin"
+    private(set) var username = "admin"
 
     private var stok = ""
     private var sysauth = ""
@@ -61,21 +61,35 @@ final class TPLinkClient {
         (try? JSONSerialization.jsonObject(with: d)) as? [String: Any]
     }
 
+    /// Asks for one of the login pages. Newer firmware (travel routers like the TL-WR1502X) wants the
+    /// operation only in the URL and an empty body; older Archers also take it in the body.
+    private func loginPage(_ form: String) async throws -> [String: Any] {
+        var last = ""
+        for body in ["", "operation=read"] {
+            let (d, _) = try await post("/login?form=\(form)&operation=read", body: body)
+            if let o = Self.object(d), let data = o["data"] as? [String: Any] { return data }
+            last = String(decoding: d.prefix(160), as: UTF8.self)
+        }
+        throw TPError.message("The TP-Link's login page (\(form)) answered: \(last.isEmpty ? "nothing" : last)")
+    }
+
     private func keys() async throws {
-        let (d, _) = try await post("/login?form=keys&operation=read", body: "operation=read")
-        guard let o = Self.object(d), let data = o["data"] as? [String: Any], let pw = data["password"] as? [String], pw.count == 2 else {
-            throw TPError.message("This doesn't look like a TP-Link Archer with the encrypted web login.")
+        let data = try await loginPage("keys")
+        guard let pw = data["password"] as? [String], pw.count == 2 else {
+            throw TPError.message("The TP-Link didn't send its password key.")
         }
         passN = pw[0]
         passE = pw[1]
         plain = pw[0].count >= 512
+        // Repeater-mode firmware reports its account name (often empty); the signature hash uses it.
+        if let u = data["username"] as? String, !forceAdmin { username = u } else if forceAdmin { username = "admin" }
     }
     private var passN = ""
     private var passE = ""
 
     private func auth() async throws {
-        let (d, _) = try await post("/login?form=auth&operation=read", body: "operation=read")
-        guard let o = Self.object(d), let data = o["data"] as? [String: Any], let k = data["key"] as? [String], k.count == 2 else {
+        let data = try await loginPage("auth")
+        guard let k = data["key"] as? [String], k.count == 2 else {
             throw TPError.message("The TP-Link didn't send its signing key.")
         }
         signN = k[0]
@@ -84,6 +98,19 @@ final class TPLinkClient {
     }
 
     func login() async throws {
+        do {
+            try await loginOnce()
+        } catch let e as TPError {
+            // Repeater-mode firmware reports an empty account name. If the router turns that signature
+            // down for anything other than a wrong password, try once more the classic way ("admin").
+            guard username.isEmpty, case .message(let m) = e, !m.hasPrefix("Wrong password"), !m.contains("refusing logins") else { throw e }
+            forceAdmin = true
+            try await loginOnce()
+        }
+    }
+    private var forceAdmin = false
+
+    private func loginOnce() async throws {
         logged = false
         stok = ""
         sysauth = ""
@@ -259,9 +286,7 @@ extension TPLinkClient {
     }
 
     func status() async throws -> TPStatus {
-        guard let d = try await request("admin/status?form=all", "operation=read") as? [String: Any] else {
-            throw TPError.message("The TP-Link's status didn't come back.")
-        }
+        let d = ((try? await request("admin/status?form=all", "operation=read")) as? [String: Any]) ?? [:]
         var s = TPStatus()
         s.wanIP = Self.str(d["wan_ipv4_ipaddr"])
         s.wanGateway = Self.str(d["wan_ipv4_gateway"])
