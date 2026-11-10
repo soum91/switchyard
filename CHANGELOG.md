@@ -1,5 +1,13 @@
 # Changelog
 
+## [build-17] - 2026-11-10
+
+## Verified changes since build-16
+
+- TP-Link: show why the dashboard is empty; fix squished loading screen ([`94428b6b`](https://github.com/soum91/switchyard/commit/94428b6b2b0536f3c2f9af00379a2f045ceb2dc1); `Switchyard/TPLink/TPLinkClient.swift`, `Switchyard/TPLink/TPLinkViews.swift`)
+
+[Inspect exact code changes](https://github.com/soum91/switchyard/compare/build-16...build-17)
+
 ## [build-16] - 2026-11-10
 
 ## Verified changes since build-15
