@@ -20,6 +20,15 @@
       "screenshotURLs": [],
       "versions": [
         {
+          "version": "1.0.0.21",
+          "buildVersion": "21",
+          "date": "2026-11-10T08:21:36Z",
+          "localizedDescription": "- TP-Link: Diagnose from the setup screen when login gives no working session (115879e)\n- docs: record factual changes for build-20 [skip ci] (1559bf1)\n- Enforce pseudonymous author metadata and owner privacy (f8180f8)",
+          "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-21/Switchyard-1.0.0-build-21.ipa",
+          "size": 945616,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "1.0.0.20",
           "buildVersion": "20",
           "date": "2026-11-10T08:05:48Z",
@@ -200,11 +209,11 @@
           "minOSVersion": "17.0"
         }
       ],
-      "version": "1.0.0.20",
-      "versionDate": "2026-11-10T08:05:48Z",
-      "versionDescription": "- TP-Link: native dashboard for TL-WR1502X in repeater mode (7ae293b)\n- docs: record factual changes for build-19 [skip ci] (aaa67e9)",
-      "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-20/Switchyard-1.0.0-build-20.ipa",
-      "size": 931828,
+      "version": "1.0.0.21",
+      "versionDate": "2026-11-10T08:21:36Z",
+      "versionDescription": "- TP-Link: Diagnose from the setup screen when login gives no working session (115879e)\n- docs: record factual changes for build-20 [skip ci] (1559bf1)\n- Enforce pseudonymous author metadata and owner privacy (f8180f8)",
+      "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-21/Switchyard-1.0.0-build-21.ipa",
+      "size": 945616,
       "appPermissions": {}
     }
   ],
