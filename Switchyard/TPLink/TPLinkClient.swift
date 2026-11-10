@@ -188,11 +188,16 @@ final class TPLinkClient {
         }
         let (d, resp) = result
         if resp.statusCode == 401 || resp.statusCode == 403 { throw TPNeedsLogin.again }
-        guard var o = Self.object(d) else {
+        var bare: [String: Any]?
+        if Self.object(d) == nil, !plain, !d.isEmpty,
+           let dec = try? session.decrypt(String(decoding: d, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)) {
+            bare = Self.object(Data(dec.utf8))   // some firmware answers with the bare encrypted text
+        }
+        guard var o = bare ?? Self.object(d) else {
             if d.isEmpty { return [String: Any]() }   // reboot and logout answer with nothing
             throw TPNeedsLogin.again
         }
-        if !plain, let enc = o["data"] as? String {
+        if bare == nil, !plain, let enc = o["data"] as? String {
             guard let inner = Self.object(Data(try session.decrypt(enc).utf8)) else { throw TPNeedsLogin.again }
             o = inner
         }
@@ -406,31 +411,71 @@ extension TPLinkClient {
         return (found.sorted(), seen.count)
     }
 
-    /// One read with no retries and no login loop: what the router actually answered, decrypted.
-    private func rawRead(_ path: String, _ op: String) async -> String {
+    /// One call with no retries and no login loop: what the router actually answered, decrypted.
+    /// opInURL: put operation=… in the query; bodyOp: also put it in the (encrypted) body; json: body as JSON.
+    private func rawCall(_ path: String, op: String, opInURL: Bool = true, bodyOp: Bool = true, json: Bool = false, rawBody: String? = nil) async -> String {
         var p = path
-        if !p.contains("operation=") { p += "&operation=" + op }
+        if opInURL, !p.contains("operation=") { p += (p.contains("?") ? "&" : "?") + "operation=" + op }
+        let body = rawBody ?? (bodyOp ? (json ? "{\"operation\":\"\(op)\"}" : "operation=" + op) : "")
         do {
             let result: (Data, HTTPURLResponse)
             if plain {
-                result = try await post("/" + stokPath(p), body: "operation=" + op)
+                result = try await post("/" + stokPath(p), body: body, contentType: json ? "application/json" : "application/x-www-form-urlencoded")
+            } else if body.isEmpty {
+                let sign = try session.sign(seq: seq, login: false, hash: hash, nHex: signN, eHex: signE)
+                result = try await post("/" + stokPath(p), body: "sign=\(sign)&data=")
             } else {
-                let enc = try session.encrypt("operation=" + op)
+                let enc = try session.encrypt(body)
                 let sign = try session.sign(seq: seq + enc.count, login: false, hash: hash, nHex: signN, eHex: signE)
                 result = try await post("/" + stokPath(p), body: "sign=\(sign)&data=\(Self.form(enc))")
             }
             let (d, r) = result
-            guard var o = Self.object(d) else {
-                return "HTTP \(r.statusCode), not JSON: " + String(decoding: d.prefix(120), as: UTF8.self).replacingOccurrences(of: "\n", with: " ")
+            let text = String(decoding: d, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+            if var o = Self.object(d) {
+                if !plain, let enc = o["data"] as? String {
+                    guard let inner = Self.object(Data(((try? session.decrypt(enc)) ?? "").utf8)) else { return "HTTP \(r.statusCode), couldn't decrypt the data field" }
+                    o = inner
+                }
+                return "HTTP \(r.statusCode) " + Self.compact(Self.redact(o))
             }
-            if !plain, let enc = o["data"] as? String {
-                guard let inner = Self.object(Data((try? session.decrypt(enc))?.utf8 ?? "".utf8)) else { return "HTTP \(r.statusCode), couldn't decrypt the answer" }
-                o = inner
+            // Some firmware answers with the bare encrypted text, no JSON around it.
+            if !text.isEmpty, let dec = try? session.decrypt(text) {
+                if let o = Self.object(Data(dec.utf8)) { return "HTTP \(r.statusCode) (bare encrypted) " + Self.compact(Self.redact(o)) }
+                return "HTTP \(r.statusCode) (bare encrypted, not JSON) " + String(dec.prefix(200))
             }
-            return Self.compact(Self.redact(o))
+            return "HTTP \(r.statusCode), not JSON: " + String(text.prefix(200)).replacingOccurrences(of: "\n", with: " ")
         } catch {
             return "failed: \(error.localizedDescription)"
         }
+    }
+
+    private func rawCallNoStok(_ path: String) async -> String {
+        let saved = stok
+        stok = ""
+        defer { stok = saved }
+        return await rawCall(path, op: "read")
+    }
+
+    /// Lines of the web UI that mention "form=" or the "ds" API, so the request style is visible.
+    private func discoverStyle() async -> [String] {
+        var out = Set<String>()
+        guard let index = await fetchText("/webpages/index.html") else { return ["index.html not readable"] }
+        var files = ["/webpages/index.html"]
+        for ref in Self.matches(#"[A-Za-z0-9_./-]+\.js"#, in: index) where !ref.contains("//") {
+            var p = ref
+            while p.hasPrefix("./") { p.removeFirst(2) }
+            files.append(p.hasPrefix("/") ? p : "/webpages/" + p)
+        }
+        var names: [String] = []
+        for f in files.prefix(25) {
+            guard let t = await fetchText(f) else { continue }
+            names.append("\(f) (\(t.count) chars)")
+            for m in Self.matches(#".{0,60}(form=|/ds[\"'?]|stok=|\.su\.url\(|proxy\(|method[\"']?:).{0,60}"#, in: t) {
+                out.insert(m.replacingOccurrences(of: "\n", with: " "))
+                if out.count >= 60 { break }
+            }
+        }
+        return ["Script files:"] + names + ["Request-style snippets:"] + out.sorted().prefix(60)
     }
 
     private static let secretKeys = ["key", "password", "psk", "pwd", "passphrase", "secret", "token", "stok", "sysauth", "wps_pin", "pincode"]
@@ -471,22 +516,36 @@ extension TPLinkClient {
         }
         progress("Reading the router's web pages…")
         let (found, files) = await discoverPages()
-        out.append("Web UI files read: \(files); pages found: \(found.count)")
-        let known = ["admin/status?form=all", "admin/status?form=router", "admin/status?form=internet", "admin/status?form=perf",
+        out.append("Web UI files read: \(files); pages found: \(found.count): " + found.joined(separator: ", "))
+
+        progress("Trying request styles…")
+        out.append("")
+        out.append("Request styles on admin/network?form=status_ipv4:")
+        let t = "admin/network?form=status_ipv4"
+        out.append("A url+body op:   " + (await rawCall(t, op: "read")))
+        out.append("B body op only:  " + (await rawCall(t, op: "read", opInURL: false)))
+        out.append("C url op only:   " + (await rawCall(t, op: "read", bodyOp: false)))
+        out.append("D json body:     " + (await rawCall(t, op: "read", json: true)))
+        out.append("E ds get:        " + (await rawCall("ds", op: "", opInURL: false, rawBody: "{\"method\":\"get\",\"system\":{\"name\":[\"sys\"]}}")))
+        out.append("F ds device:     " + (await rawCall("ds", op: "", opInURL: false, rawBody: "{\"method\":\"get\",\"device_info\":{\"name\":\"info\"}}")))
+        out.append("G locale:        " + (await rawCall("locale?form=lang", op: "read")))
+        out.append("H no stok:       " + (await rawCallNoStok(t)))
+
+        progress("Reading how the web UI makes requests…")
+        out.append("")
+        out.append(contentsOf: await discoverStyle())
+
+        let known = ["admin/status?form=all", "admin/status?form=router", "admin/status?form=perf",
                      "admin/status?form=client_status", "admin/wireless?form=wireless_2g", "admin/wireless?form=wireless_5g",
-                     "admin/firmware?form=upgrade", "admin/ledgeneral?form=setting", "admin/system?form=sysmode"]
+                     "admin/firmware?form=upgrade", "admin/system?form=sysmode"]
         let skip = ["logout", "reboot", "reset", "restore", "backup", "factory", "login", "upgrade_fw"]
         let pages = (found + known.filter { !found.contains($0) })
             .filter { p in !skip.contains(where: { p.lowercased().contains($0) }) }
         out.append("")
-        for (i, p) in pages.prefix(120).enumerated() {
-            progress("Asking \(i + 1) of \(min(pages.count, 120)): \(p)")
-            let r = await rawRead(p, "read")
-            out.append("\(p) [read] \(r)")
-            if r.contains("errorcode") || r.hasPrefix("HTTP") {
-                let l = await rawRead(p, "load")
-                out.append("\(p) [load] \(l)")
-            }
+        out.append("Pages:")
+        for (i, p) in pages.prefix(80).enumerated() {
+            progress("Asking \(i + 1) of \(min(pages.count, 80)): \(p)")
+            out.append("\(p) " + (await rawCall(p, op: "read")))
         }
         return out.joined(separator: "\n")
     }
