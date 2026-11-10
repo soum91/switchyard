@@ -20,6 +20,15 @@
       "screenshotURLs": [],
       "versions": [
         {
+          "version": "1.0.0.15",
+          "buildVersion": "15",
+          "date": "2026-11-10T06:30:33Z",
+          "localizedDescription": "- TP-Link diagnosis: trace both login names, follow lazy-loaded UI chunks, include request code (fd8fc78)\n- docs: record factual changes for build-14 [skip ci] (e093f5d)",
+          "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-15/Switchyard-1.0.0-build-15.ipa",
+          "size": 862749,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "1.0.0.14",
           "buildVersion": "14",
           "date": "2026-11-10T06:08:25Z",
@@ -146,11 +155,11 @@
           "minOSVersion": "17.0"
         }
       ],
-      "version": "1.0.0.14",
-      "versionDate": "2026-11-10T06:08:25Z",
-      "versionDescription": "- TP-Link: decrypt bare encrypted replies; diagnosis tries request styles (f4b6910)\n- docs: record factual changes for build-13 [skip ci] (7fbe1b9)",
-      "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-14/Switchyard-1.0.0-build-14.ipa",
-      "size": 854705,
+      "version": "1.0.0.15",
+      "versionDate": "2026-11-10T06:30:33Z",
+      "versionDescription": "- TP-Link diagnosis: trace both login names, follow lazy-loaded UI chunks, include request code (fd8fc78)\n- docs: record factual changes for build-14 [skip ci] (e093f5d)",
+      "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-15/Switchyard-1.0.0-build-15.ipa",
+      "size": 862749,
       "appPermissions": {}
     }
   ],
