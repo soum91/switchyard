@@ -7,6 +7,8 @@ struct TPWebDashboard: View {
     let host: String
     var onForget: () -> Void
     @StateObject private var web = TPWeb()
+    @ObservedObject private var capture = TPCapture.shared
+    @State private var showReport = false
 
     private var url: URL? {
         var h = host.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -41,12 +43,17 @@ struct TPWebDashboard: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Button { load() } label: { Label("Reload", systemImage: "arrow.clockwise") }
+                    Button { showReport = true } label: { Label("What the page loaded (\(capture.pageCount) pages)", systemImage: "list.bullet.rectangle") }
+                    Button { capture.clear() } label: { Label("Clear that list", systemImage: "trash") }
                     if let url { Link(destination: url) { Label("Open in Safari", systemImage: "safari") } }
                     Button("Forget this router", role: .destructive, action: onForget)
                 } label: { Image(systemName: "ellipsis.circle") }
             }
         }
         .onAppear { if web.view.url == nil { load() } }
+        .sheet(isPresented: $showReport) {
+            DiagnosticReportView(title: "TP-Link pages", report: capture.report(host: host), filename: "switchyard-tplink-pages.txt")
+        }
     }
 
     private func load() {
@@ -66,6 +73,8 @@ final class TPWeb: NSObject, ObservableObject, WKNavigationDelegate {
     override init() {
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .default()   // keeps the router's login between launches when it allows
+        config.userContentController.addUserScript(WKUserScript(source: TPCapture.script, injectionTime: .atDocumentStart, forMainFrameOnly: false))
+        config.userContentController.add(TPCaptureHandler(), name: "sy")
         view = WKWebView(frame: .zero, configuration: config)
         super.init()
         view.navigationDelegate = self
