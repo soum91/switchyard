@@ -11,6 +11,8 @@ final class TPLinkModel: ObservableObject {
     @Published var error: String?
     @Published var busy: Set<String> = []
     @Published var toast: String?
+    @Published var report: String?
+    @Published var diagnosing: String?
     private var poller: Task<Void, Never>?
 
     init(host: String, password: String) { client = TPLinkClient(host: host, password: password) }
@@ -49,6 +51,15 @@ final class TPLinkModel: ObservableObject {
             if let w = try? await client.wifi(f), w.ssid != nil || w.enabled != nil { out.append(w) }
         }
         wifi = out
+    }
+
+    func diagnose() async {
+        diagnosing = "Logging in…"
+        stop()
+        defer { start() }
+        let r = await client.diagnose { [weak self] p in self?.diagnosing = p }
+        diagnosing = nil
+        report = r
     }
 
     func say(_ t: String) {
@@ -106,11 +117,27 @@ struct TPLinkDashboard: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
+                    Button { Task { await model.diagnose() } } label: { Label("Diagnose this router", systemImage: "stethoscope") }
+                        .disabled(model.diagnosing != nil)
                     Button("Forget this router", role: .destructive, action: onForget)
                 } label: { Image(systemName: "ellipsis.circle") }
             }
         }
         .sheet(item: $editing) { w in TPWifiEditor(model: model, wifi: w) }
+        .sheet(isPresented: Binding(get: { model.report != nil }, set: { if !$0 { model.report = nil } })) {
+            DiagnosticReportView(title: "TP-Link diagnosis", report: model.report ?? "", filename: "switchyard-tplink-diagnosis.txt")
+        }
+        .overlay {
+            if let d = model.diagnosing {
+                VStack(spacing: 10) {
+                    ProgressView()
+                    Text(d).font(.footnote).multilineTextAlignment(.center)
+                }
+                .padding(20)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+                .padding(30)
+            }
+        }
         .confirmationDialog("Reboot the TP-Link?", isPresented: $confirmReboot, titleVisibility: .visible) {
             Button("Reboot", role: .destructive) {
                 Task { await model.act("reboot", done: "Rebooting. Give it two minutes.") { try await model.client.reboot() } }

@@ -365,3 +365,129 @@ extension TPLinkClient {
         await logout()
     }
 }
+
+// MARK: - Diagnose: find out which pages this firmware has
+
+extension TPLinkClient {
+    private func fetchText(_ path: String) async -> String? {
+        guard let url = URL(string: host + path) else { return nil }
+        var req = URLRequest(url: url)
+        req.timeoutInterval = 8
+        req.httpShouldHandleCookies = false
+        guard let (d, r) = try? await URLSession.shared.data(for: req),
+              (r as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+        return String(decoding: d.prefix(2_000_000), as: UTF8.self)
+    }
+
+    private static func matches(_ pattern: String, in s: String) -> [String] {
+        guard let re = try? NSRegularExpression(pattern: pattern) else { return [] }
+        return re.matches(in: s, range: NSRange(s.startIndex..., in: s)).compactMap { Range($0.range, in: s).map { String(s[$0]) } }
+    }
+
+    /// Reads the router's own web pages (no login needed) and lists every "admin/x?form=y" they call.
+    private func discoverPages() async -> (pages: [String], files: Int) {
+        var queue = ["/webpages/index.html"]
+        var seen = Set<String>()
+        var found = Set<String>()
+        while let path = queue.first, seen.count < 80 {
+            queue.removeFirst()
+            guard seen.insert(path).inserted, let text = await fetchText(path) else { continue }
+            for m in Self.matches(#"admin/[A-Za-z0-9_]+\?form=[A-Za-z0-9_]+"#, in: text) { found.insert(m) }
+            let dir = path.hasPrefix("/webpages/") ? "/webpages/" : "/"
+            for ref in Self.matches(#"[A-Za-z0-9_./-]+\.(js|html)"#, in: text) {
+                guard !ref.contains("//"), !ref.hasPrefix("http") else { continue }
+                var p = ref
+                while p.hasPrefix("./") { p.removeFirst(2) }
+                if p.hasPrefix("../") { continue }
+                let full = p.hasPrefix("/") ? p : dir + p
+                if full.hasPrefix("/webpages/"), !seen.contains(full), !queue.contains(full) { queue.append(full) }
+            }
+        }
+        return (found.sorted(), seen.count)
+    }
+
+    /// One read with no retries and no login loop: what the router actually answered, decrypted.
+    private func rawRead(_ path: String, _ op: String) async -> String {
+        var p = path
+        if !p.contains("operation=") { p += "&operation=" + op }
+        do {
+            let result: (Data, HTTPURLResponse)
+            if plain {
+                result = try await post("/" + stokPath(p), body: "operation=" + op)
+            } else {
+                let enc = try session.encrypt("operation=" + op)
+                let sign = try session.sign(seq: seq + enc.count, login: false, hash: hash, nHex: signN, eHex: signE)
+                result = try await post("/" + stokPath(p), body: "sign=\(sign)&data=\(Self.form(enc))")
+            }
+            let (d, r) = result
+            guard var o = Self.object(d) else {
+                return "HTTP \(r.statusCode), not JSON: " + String(decoding: d.prefix(120), as: UTF8.self).replacingOccurrences(of: "\n", with: " ")
+            }
+            if !plain, let enc = o["data"] as? String {
+                guard let inner = Self.object(Data((try? session.decrypt(enc))?.utf8 ?? "".utf8)) else { return "HTTP \(r.statusCode), couldn't decrypt the answer" }
+                o = inner
+            }
+            return Self.compact(Self.redact(o))
+        } catch {
+            return "failed: \(error.localizedDescription)"
+        }
+    }
+
+    private static let secretKeys = ["key", "password", "psk", "pwd", "passphrase", "secret", "token", "stok", "sysauth", "wps_pin", "pincode"]
+
+    private static func redact(_ v: Any) -> Any {
+        if let d = v as? [String: Any] {
+            var out: [String: Any] = [:]
+            for (k, x) in d {
+                let l = k.lowercased()
+                if secretKeys.contains(where: { l.contains($0) }), !(x is [String: Any]), !(x is [Any]), "\(x)" != "" {
+                    out[k] = "<redacted>"
+                } else {
+                    out[k] = redact(x)
+                }
+            }
+            return out
+        }
+        if let a = v as? [Any] { return a.map(redact) }
+        return v
+    }
+
+    private static func compact(_ v: Any) -> String {
+        guard let d = try? JSONSerialization.data(withJSONObject: v, options: [.sortedKeys]) else { return "\(v)" }
+        let s = String(decoding: d, as: UTF8.self)
+        return s.count > 2500 ? String(s.prefix(2500)) + " …(\(s.count) chars)" : s
+    }
+
+    /// Logs in, finds every page the router's web UI uses, and reads each one (read-only).
+    func diagnose(progress: @escaping (String) -> Void) async -> String {
+        var out: [String] = []
+        out.append("TP-Link at \(host)")
+        do {
+            if !logged { try await login() }
+            out.append("Login: OK (account name \(username.isEmpty ? "empty" : "\"\(username)\""), \(plain ? "plain" : "encrypted") requests)")
+        } catch {
+            out.append("Login: FAILED: \(error.localizedDescription)")
+            return out.joined(separator: "\n")
+        }
+        progress("Reading the router's web pages…")
+        let (found, files) = await discoverPages()
+        out.append("Web UI files read: \(files); pages found: \(found.count)")
+        let known = ["admin/status?form=all", "admin/status?form=router", "admin/status?form=internet", "admin/status?form=perf",
+                     "admin/status?form=client_status", "admin/wireless?form=wireless_2g", "admin/wireless?form=wireless_5g",
+                     "admin/firmware?form=upgrade", "admin/ledgeneral?form=setting", "admin/system?form=sysmode"]
+        let skip = ["logout", "reboot", "reset", "restore", "backup", "factory", "login", "upgrade_fw"]
+        let pages = (found + known.filter { !found.contains($0) })
+            .filter { p in !skip.contains(where: { p.lowercased().contains($0) }) }
+        out.append("")
+        for (i, p) in pages.prefix(120).enumerated() {
+            progress("Asking \(i + 1) of \(min(pages.count, 120)): \(p)")
+            let r = await rawRead(p, "read")
+            out.append("\(p) [read] \(r)")
+            if r.contains("errorcode") || r.hasPrefix("HTTP") {
+                let l = await rawRead(p, "load")
+                out.append("\(p) [load] \(l)")
+            }
+        }
+        return out.joined(separator: "\n")
+    }
+}
