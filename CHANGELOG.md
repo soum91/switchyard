@@ -1,5 +1,13 @@
 # Changelog
 
+## [build-16] - 2026-11-10
+
+## Verified changes since build-15
+
+- TP-Link: account name field at setup (TL-WR1502X signs in with name + password) ([`f09502d0`](https://github.com/soum91/switchyard/commit/f09502d059c275760543e81d6de4fb9284e0c2e2); `Switchyard/App/SetupViews.swift`, `Switchyard/App/SwitchyardApp.swift`, `Switchyard/App/Vault.swift`, and 2 more)
+
+[Inspect exact code changes](https://github.com/soum91/switchyard/compare/build-15...build-16)
+
 ## [build-15] - 2026-11-10
 
 ## Verified changes since build-14
