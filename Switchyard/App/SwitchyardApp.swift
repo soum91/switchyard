@@ -96,7 +96,7 @@ struct TPLinkTab: View {
     @EnvironmentObject var store: AppStore
     var body: some View {
         if let c = store.tpCreds, c.web == true {
-            TPWebDashboard(host: c.host) { store.setTP(nil) }
+            TPWebDashboard(host: c.host, onForget: { store.setTP(nil) }, onNative: { store.setTP(nil) })
         } else if let m = store.tplink, let c = store.tpCreds {
             TPLinkDashboard(model: m, onForget: { store.setTP(nil) },
                             onUseWeb: { store.setTP(TPCreds(host: c.host, password: "", web: true)) })

@@ -6,6 +6,7 @@ import WebKit
 struct TPWebDashboard: View {
     let host: String
     var onForget: () -> Void
+    var onNative: () -> Void = {}
     @StateObject private var web = TPWeb()
     @ObservedObject private var capture = TPCapture.shared
     @State private var showReport = false
@@ -46,6 +47,7 @@ struct TPWebDashboard: View {
                     Button { showReport = true } label: { Label("What the page loaded (\(capture.pageCount) pages)", systemImage: "list.bullet.rectangle") }
                     Button { capture.clear() } label: { Label("Clear that list", systemImage: "trash") }
                     if let url { Link(destination: url) { Label("Open in Safari", systemImage: "safari") } }
+                    Button { onNative() } label: { Label("Use Switchyard's dashboard", systemImage: "square.grid.2x2") }
                     Button("Forget this router", role: .destructive, action: onForget)
                 } label: { Image(systemName: "ellipsis.circle") }
             }

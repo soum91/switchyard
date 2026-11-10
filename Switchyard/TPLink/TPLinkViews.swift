@@ -48,7 +48,8 @@ final class TPLinkModel: ObservableObject {
 
     func loadWifi() async {
         var out: [TPWifi] = []
-        for f in ["wireless_2g", "wireless_5g", "guest_2g", "guest_5g"] {
+        let forms = client.isRepeater ? ["ext_2g", "ext_5g"] : ["wireless_2g", "wireless_5g", "guest_2g", "guest_5g"]
+        for f in forms {
             if let w = try? await client.wifi(f), w.ssid != nil || w.enabled != nil { out.append(w) }
         }
         wifi = out
@@ -157,11 +158,20 @@ struct TPLinkDashboard: View {
         VStack(alignment: .leading, spacing: 12) {
             CardTitle(text: model.firmware?.model ?? "TP-Link", icon: "wifi.router")
             HStack {
-                stat("CPU", s.cpu.map { pct($0) } ?? "–")
-                stat("Memory", s.mem.map { pct($0) } ?? "–")
+                if s.upstreamSSID != nil || s.internet != nil {
+                    stat("Internet", s.internet == "connected" ? "Online" : (s.internet?.capitalized ?? "–"))
+                    stat("Signal", s.upstreamSignal.map { "\($0) bars" } ?? "–")
+                } else {
+                    stat("CPU", s.cpu.map { pct($0) } ?? "–")
+                    stat("Memory", s.mem.map { pct($0) } ?? "–")
+                }
                 stat("Devices", "\(s.clients.count)")
             }
             VStack(alignment: .leading, spacing: 3) {
+                if let up = s.upstreamSSID { row("Extending", up + (s.upstreamBand.map { " (\($0))" } ?? "")) }
+                if s.channel2g != nil || s.channel5g != nil {
+                    row("Channels", [s.channel2g.map { "2.4 GHz ch \($0)" }, s.channel5g.map { "5 GHz ch \($0)" }].compactMap { $0 }.joined(separator: ", "))
+                }
                 if let ip = s.wanIP, ip != "0.0.0.0" { row("Internet address", ip) }
                 if let gw = s.wanGateway, gw != "0.0.0.0" { row("Gateway", gw) }
                 if let lan = s.lanIP { row("Router address", lan) }
@@ -218,7 +228,10 @@ struct TPLinkDashboard: View {
                         Text("\(c.ip) · \(c.mac)").font(.caption2.monospaced()).foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Text(c.kind).font(.caption).foregroundStyle(.secondary)
+                    VStack(alignment: .trailing, spacing: 1) {
+                        Text(c.kind).font(.caption).foregroundStyle(.secondary)
+                        if let sig = c.signal { Text("\(sig) dBm").font(.caption2.monospacedDigit()).foregroundStyle(.secondary) }
+                    }
                 }
             }
             if s.clients.isEmpty { Text("Nothing connected.").foregroundStyle(.secondary) }

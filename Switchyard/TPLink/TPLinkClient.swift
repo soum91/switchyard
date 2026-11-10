@@ -44,7 +44,7 @@ final class TPLinkClient {
         req.setValue(contentType, forHTTPHeaderField: "Content-Type")
         req.setValue(host + "/webpages/index.html", forHTTPHeaderField: "Referer")
         req.setValue(host, forHTTPHeaderField: "Origin")
-        if !sysauth.isEmpty { req.setValue("sysauth=" + sysauth, forHTTPHeaderField: "Cookie") }
+        if !sysauth.isEmpty { req.setValue(sysauth, forHTTPHeaderField: "Cookie") }
         req.httpBody = Data(body.utf8)
         do {
             let (d, r) = try await URLSession.shared.data(for: req)
@@ -88,8 +88,11 @@ final class TPLinkClient {
         passE = pw[1]
         plain = pw[0].count >= 512
         // Repeater-mode firmware reports its account name (often empty); the signature hash uses it.
-        if let f = fixedUsername { username = f }
-        else if let u = data["username"] as? String, !forceAdmin { username = u } else if forceAdmin { username = "admin" }
+        reportedName = data["username"] as? String
+        mode = data["mode"] as? String
+        if let o = override { username = o }
+        else if forceAdmin { username = "admin" }
+        else { username = reportedName ?? "admin" }
     }
     private var passN = ""
     private var passE = ""
@@ -104,16 +107,51 @@ final class TPLinkClient {
         seq = (data["seq"] as? Int) ?? Int("\(data["seq"] ?? "0")") ?? 0
     }
 
+    /// Logs in and checks the session can actually read pages. The account name that goes into the
+    /// request signature differs by firmware (empty in repeater mode, "admin" on Archers, or one you set),
+    /// so each is tried until one gives a working session; the one that works is remembered.
     func login() async throws {
-        do {
+        if let good = workingName {
+            override = good
             try await loginOnce()
-        } catch let e as TPError {
-            // Repeater-mode firmware reports an empty account name. If the router turns that signature
-            // down for anything other than a wrong password, try once more the classic way ("admin").
-            guard fixedUsername == nil, username.isEmpty, case .message(let m) = e, !m.hasPrefix("Wrong password"), !m.contains("refusing logins") else { throw e }
-            forceAdmin = true
-            try await loginOnce()
+            if await sessionWorks() { return }
+            workingName = nil
         }
+        var names: [String?] = [nil]
+        if let f = fixedUsername { names.append(f) }
+        names.append("admin")
+        var used = Set<String>()
+        var notes: [String] = []
+        for n in names {
+            if let n, used.contains(n) { continue }
+            override = n
+            do {
+                try await loginOnce()
+                if used.contains(username) { continue }
+                used.insert(username)
+                if await sessionWorks() { workingName = username; return }
+                notes.append("name \"\(username)\": signed in, but the session can't read anything")
+            } catch {
+                let name = n ?? username
+                used.insert(name)
+                if case TPError.message(let m) = error, m.hasPrefix("Wrong password") || m.contains("refusing") { throw error }
+                notes.append("name \"\(name)\": \(error.localizedDescription)")
+            }
+        }
+        logged = false
+        throw TPError.message("The TP-Link took the password but gave no working session. " + notes.joined(separator: "; "))
+    }
+    private var override: String?
+    private var workingName: String?
+    private(set) var reportedName: String?
+    private(set) var mode: String?
+    var isRepeater: Bool { mode == "repeater" }
+
+    private func sessionWorks() async -> Bool {
+        for p in ["admin/status?form=internet", "admin/firmware?form=upgrade", "admin/status?form=all"] {
+            if (try? await send(p, "operation=read")) != nil { return true }
+        }
+        return false
     }
     private var forceAdmin = false
 
@@ -147,9 +185,11 @@ final class TPLinkClient {
             throw TPError.message("Login failed.")
         }
         stok = s
-        if let cookie = resp.value(forHTTPHeaderField: "Set-Cookie"),
-           let r = cookie.range(of: #"sysauth=([^;]+)"#, options: .regularExpression) {
-            sysauth = String(cookie[r].dropFirst("sysauth=".count))
+        // Send back every cookie the login set (the session cookie isn't always called "sysauth").
+        if let url = resp.url {
+            let fields = resp.allHeaderFields.reduce(into: [String: String]()) { $0["\($1.key)"] = "\($1.value)" }
+            let cookies = HTTPCookie.cookies(withResponseHeaderFields: fields, for: url)
+            if !cookies.isEmpty { sysauth = cookies.map { "\($0.name)=\($0.value)" }.joined(separator: "; ") }
         }
         logged = true
     }
@@ -242,6 +282,7 @@ final class TPLinkClient {
 struct TPStatus: Equatable {
     struct Client: Equatable, Identifiable {
         var mac: String; var ip: String; var name: String; var kind: String
+        var signal: Int? = nil
         var id: String { mac }
     }
     var wanIP: String?
@@ -255,6 +296,13 @@ struct TPStatus: Equatable {
     var guest2g: Bool?
     var guest5g: Bool?
     var clients: [Client] = []
+    // Repeater mode
+    var internet: String?
+    var upstreamSSID: String?
+    var upstreamBand: String?
+    var upstreamSignal: Int?
+    var channel2g: String?
+    var channel5g: String?
 }
 
 struct TPWifi: Equatable, Identifiable {
@@ -271,6 +319,8 @@ struct TPWifi: Equatable, Identifiable {
         case "wireless_5g": return "5 GHz"
         case "guest_2g": return "Guest 2.4 GHz"
         case "guest_5g": return "Guest 5 GHz"
+        case "ext_2g": return "Extended 2.4 GHz"
+        case "ext_5g": return "Extended 5 GHz"
         default: return form
         }
     }
@@ -300,6 +350,8 @@ extension TPLinkClient {
     }
 
     func status() async throws -> TPStatus {
+        if !logged { try await login() }
+        if isRepeater { return try await repeaterStatus() }
         var d: [String: Any] = [:]
         var firstError: Error?
         do { d = (try await request("admin/status?form=all", "operation=read")) as? [String: Any] ?? [:] }
@@ -341,12 +393,55 @@ extension TPLinkClient {
         return s
     }
 
+    /// Travel routers in repeater/extender mode (TL-WR1502X): what they're connected to, what they
+    /// broadcast, and who's on them. Page names come from the router's own web interface.
+    private func repeaterStatus() async throws -> TPStatus {
+        var s = TPStatus()
+        let net = try await request("admin/status?form=internet", "operation=read") as? [String: Any] ?? [:]
+        s.internet = Self.str(net["internet_status"])
+        if let up = try? await request("admin/status?form=rootap", "operation=read") as? [String: Any] {
+            let band = Self.on(up["enable_5g"]) == true ? "5g" : "2g"
+            s.upstreamSSID = Self.str(up["ssid_\(band)"])
+            s.upstreamBand = band == "5g" ? "5 GHz" : "2.4 GHz"
+            s.upstreamSignal = Self.num(up["signal_\(band)"]).map { Int($0) }
+        }
+        if let r = try? await request("admin/status?form=repeater", "operation=read") as? [String: Any] {
+            s.lanIP = Self.str(r["wired_ip"])
+            s.wifi2g = Self.on(r["enable_2g"])
+            s.wifi5g = Self.on(r["enable_5g"])
+            s.channel2g = Self.str(r["channel_2g"])
+            s.channel5g = Self.str(r["channel_5g"])
+        }
+        var list: [[String: Any]] = []
+        for op in ["loadDevice", "read", "load"] {
+            if let l = try? await request("admin/smart_network?form=game_accelerator", "operation=\(op)") as? [[String: Any]] { list = l; break }
+        }
+        for c in list {
+            let mac = (Self.str(c["mac"]) ?? "").uppercased()
+            guard !mac.isEmpty, !s.clients.contains(where: { $0.mac == mac }) else { continue }
+            let tag = Self.str(c["deviceTag"]) ?? ""
+            let kind = tag == "5G" ? "5 GHz" : tag == "2.4G" ? "2.4 GHz" : (tag.isEmpty ? "Wi-Fi" : tag)
+            var client = TPStatus.Client(mac: mac, ip: Self.str(c["ip"]) ?? "", name: Self.str(c["deviceName"]) ?? "",
+                                         kind: (c["isGuest"] as? Bool) == true ? "Guest " + kind : kind)
+            client.signal = Self.num(c["signal"]).map { Int($0) }
+            s.clients.append(client)
+        }
+        return s
+    }
+
     func firmware() async throws -> TPFirmware {
         let d = try await request("admin/firmware?form=upgrade", "operation=read") as? [String: Any] ?? [:]
         return TPFirmware(model: Self.str(d["model"]), hardware: Self.str(d["hardware_version"]), firmware: Self.str(d["firmware_version"]))
     }
 
     func wifi(_ form: String) async throws -> TPWifi {
+        if form.hasPrefix("ext_") {
+            let band = String(form.dropFirst(4))
+            let d = try await request("admin/wireless?form=wireless_extended_network", "operation=read") as? [String: Any] ?? [:]
+            func v(_ k: String) -> Any? { d["\(k)_\(band)"] }
+            return TPWifi(form: form, enabled: Self.on(v("enable")), ssid: Self.str(v("ssid")), key: Self.str(v("psk_key")),
+                          hidden: Self.on(v("hidden")), channel: nil)
+        }
         let d = try await request("admin/wireless?form=\(form)", "operation=read") as? [String: Any] ?? [:]
         func v(_ k: String) -> Any? { d["\(form)_\(k)"] ?? d[k] }
         return TPWifi(form: form, enabled: Self.on(v("enable")), ssid: Self.str(v("ssid")), key: Self.str(v("psk_key")),
@@ -354,6 +449,16 @@ extension TPLinkClient {
     }
 
     func setWifi(_ form: String, enable: Bool? = nil, ssid: String? = nil, key: String? = nil, hidden: Bool? = nil) async throws {
+        if form.hasPrefix("ext_") {
+            let band = String(form.dropFirst(4))
+            var data = "operation=write"
+            if let enable { data += "&enable_\(band)=\(enable ? "on" : "off")" }
+            if let ssid { data += "&ssid_\(band)=\(Self.encode(ssid))" }
+            if let key { data += "&psk_key_\(band)=\(Self.encode(key))" }
+            if let hidden { data += "&hidden_\(band)=\(hidden ? "on" : "off")" }
+            _ = try await request("admin/wireless?form=wireless_extended_network", data)
+            return
+        }
         var data = "operation=write"
         let onlyEnable = ssid == nil && key == nil && hidden == nil
         if let enable { data += onlyEnable ? "&enable=\(enable ? "on" : "off")" : "&\(form)_enable=\(enable ? "on" : "off")" }
@@ -536,6 +641,7 @@ extension TPLinkClient {
         var out: [String] = []
         out.append("TP-Link at \(host)")
         progress("Trying both login names…")
+        override = nil
         forceAdmin = false
         do {
             try await loginOnce()

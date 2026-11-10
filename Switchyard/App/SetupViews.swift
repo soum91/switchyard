@@ -62,7 +62,8 @@ struct AsusSetupView: View {
 struct TPSetupView: View {
     let done: (TPCreds) -> Void
     @State private var host = "192.168.0.1"
-    @State private var archer = false
+    @State private var webPage = false
+    private var archer: Bool { !webPage }
     @State private var username = ""
     @State private var password = ""
     @State private var working = false
@@ -73,18 +74,18 @@ struct TPSetupView: View {
             Section {
                 TextField("Address", text: $host)
                     .keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
+                if archer {
+                    SecureField("Admin password", text: $password)
+                    TextField("Account name (only if it asks for one)", text: $username)
+                        .textInputAutocapitalization(.never).autocorrectionDisabled()
+                }
             } header: { Text("Router") } footer: {
-                Text("Opens the TP-Link's own page here. It asks for its account name and password itself, and everything it has works.")
+                if archer { Text("Works with Archers and travel routers like the TL-WR1502X (router or repeater mode). Only one login at a time is allowed, so log out of its web page first.") }
             }
             Section {
-                Toggle("Switchyard's own dashboard (Archer only)", isOn: $archer)
-                if archer {
-                    TextField("Account name (if it has one)", text: $username)
-                        .textInputAutocapitalization(.never).autocorrectionDisabled()
-                    SecureField("Admin password", text: $password)
-                }
+                Toggle("Use the router's own page instead", isOn: $webPage)
             } footer: {
-                if archer { Text("Works with Archer routers like the AX10/AX1500. Travel routers like the TL-WR1502X use the router's own page instead.") }
+                if webPage { Text("Shows the TP-Link's own web page here. It asks for its login itself.") }
             }
             if let error {
                 Section { Text(error).foregroundStyle(Theme.bad).font(.footnote) }
