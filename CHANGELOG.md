@@ -1,5 +1,13 @@
 # Changelog
 
+## [build-19] - 2026-11-10
+
+## Verified changes since build-18
+
+- TP-Link: note which pages the router's own interface uses ([`17b6b784`](https://github.com/soum91/switchyard/commit/17b6b784e3c36de377e2d0a798b23f86424f8763); `Switchyard/TPLink/TPCapture.swift`, `Switchyard/TPLink/TPWebView.swift`)
+
+[Inspect exact code changes](https://github.com/soum91/switchyard/compare/build-18...build-19)
+
 ## [build-18] - 2026-11-10
 
 ## Verified changes since build-17
