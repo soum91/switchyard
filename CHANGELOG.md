@@ -1,5 +1,13 @@
 # Changelog
 
+## [build-14] - 2026-11-10
+
+## Verified changes since build-13
+
+- TP-Link: decrypt bare encrypted replies; diagnosis tries request styles ([`f4b6910a`](https://github.com/soum91/switchyard/commit/f4b6910a2683062a3b7f12b4cb6969caee15d5de); `Switchyard/TPLink/TPLinkClient.swift`)
+
+[Inspect exact code changes](https://github.com/soum91/switchyard/compare/build-13...build-14)
+
 ## [build-13] - 2026-11-10
 
 ## Verified changes since build-12
