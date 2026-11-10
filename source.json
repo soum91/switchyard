@@ -20,6 +20,15 @@
       "screenshotURLs": [],
       "versions": [
         {
+          "version": "1.0.0.12",
+          "buildVersion": "12",
+          "date": "2026-11-10T05:17:44Z",
+          "localizedDescription": "- TP-Link: log in to travel routers in repeater mode (TL-WR1502X) (4427410)\n- docs: require verified diagnostic exports [skip ci] (871d6b3)\n- docs: require verified diagnostic exports [skip ci] (d7b9448)\n- docs: require verified diagnostics Copy, Share and Files export [skip ci] (dd84208)\n- docs: require verified diagnostics Copy, Share and Files export [skip ci] (b8953b9)\n- ci: separate release tracks when deriving factual changes [skip ci] (20d2bff)\n- ci: reconcile bot-created releases with factual notes [skip ci] (7bc340e)\n- ci: verify and record actual release changes [skip ci] (565775c)\n- docs: require evidence-based release changelog [skip ci] (ef88799)\n- docs: initialize factual release changelog [skip ci] (5ae99d9)",
+          "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-12/Switchyard-1.0.0-build-12.ipa",
+          "size": 804053,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "1.0.0.11",
           "buildVersion": "11",
           "date": "2026-11-06T21:21:41Z",
@@ -119,11 +128,11 @@
           "minOSVersion": "17.0"
         }
       ],
-      "version": "1.0.0.11",
-      "versionDate": "2026-11-06T21:21:41Z",
-      "versionDescription": "- Internet sources: always show Add a source, and say which radio is taken by what (62bbd94)",
-      "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-11/Switchyard-1.0.0-build-11.ipa",
-      "size": 803655,
+      "version": "1.0.0.12",
+      "versionDate": "2026-11-10T05:17:44Z",
+      "versionDescription": "- TP-Link: log in to travel routers in repeater mode (TL-WR1502X) (4427410)\n- docs: require verified diagnostic exports [skip ci] (871d6b3)\n- docs: require verified diagnostic exports [skip ci] (d7b9448)\n- docs: require verified diagnostics Copy, Share and Files export [skip ci] (dd84208)\n- docs: require verified diagnostics Copy, Share and Files export [skip ci] (b8953b9)\n- ci: separate release tracks when deriving factual changes [skip ci] (20d2bff)\n- ci: reconcile bot-created releases with factual notes [skip ci] (7bc340e)\n- ci: verify and record actual release changes [skip ci] (565775c)\n- docs: require evidence-based release changelog [skip ci] (ef88799)\n- docs: initialize factual release changelog [skip ci] (5ae99d9)",
+      "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-12/Switchyard-1.0.0-build-12.ipa",
+      "size": 804053,
       "appPermissions": {}
     }
   ],
