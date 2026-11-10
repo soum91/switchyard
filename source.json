@@ -20,6 +20,15 @@
       "screenshotURLs": [],
       "versions": [
         {
+          "version": "1.0.0.16",
+          "buildVersion": "16",
+          "date": "2026-11-10T07:05:18Z",
+          "localizedDescription": "- TP-Link: account name field at setup (TL-WR1502X signs in with name + password) (f09502d)\n- docs: record factual changes for build-15 [skip ci] (a708f50)",
+          "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-16/Switchyard-1.0.0-build-16.ipa",
+          "size": 863677,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "1.0.0.15",
           "buildVersion": "15",
           "date": "2026-11-10T06:30:33Z",
@@ -155,11 +164,11 @@
           "minOSVersion": "17.0"
         }
       ],
-      "version": "1.0.0.15",
-      "versionDate": "2026-11-10T06:30:33Z",
-      "versionDescription": "- TP-Link diagnosis: trace both login names, follow lazy-loaded UI chunks, include request code (fd8fc78)\n- docs: record factual changes for build-14 [skip ci] (e093f5d)",
-      "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-15/Switchyard-1.0.0-build-15.ipa",
-      "size": 862749,
+      "version": "1.0.0.16",
+      "versionDate": "2026-11-10T07:05:18Z",
+      "versionDescription": "- TP-Link: account name field at setup (TL-WR1502X signs in with name + password) (f09502d)\n- docs: record factual changes for build-15 [skip ci] (a708f50)",
+      "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-16/Switchyard-1.0.0-build-16.ipa",
+      "size": 863677,
       "appPermissions": {}
     }
   ],
