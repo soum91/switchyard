@@ -1,5 +1,13 @@
 # Changelog
 
+## [build-20] - 2026-11-10
+
+## Verified changes since build-19
+
+- TP-Link: native dashboard for TL-WR1502X in repeater mode ([`7ae293b0`](https://github.com/soum91/switchyard/commit/7ae293b090fcf847b58579a07f3fa925cee0c926); `Switchyard/App/SetupViews.swift`, `Switchyard/App/SwitchyardApp.swift`, `Switchyard/TPLink/TPLinkClient.swift`, and 2 more)
+
+[Inspect exact code changes](https://github.com/soum91/switchyard/compare/build-19...build-20)
+
 ## [build-19] - 2026-11-10
 
 ## Verified changes since build-18
