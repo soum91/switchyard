@@ -28,7 +28,7 @@ final class AppStore: ObservableObject {
         asus?.stop()
         tplink?.stop()
         asus = asusCreds.map { RouterModel(link: DirectLink(UbusClient(host: $0.host, user: $0.user, pass: $0.pass))) }
-        tplink = tpCreds.map { TPLinkModel(host: $0.host, password: $0.password) }
+        tplink = tpCreds.map { TPLinkModel(host: $0.host, password: $0.password, username: $0.username) }
         if active { start() }
     }
 

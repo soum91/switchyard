@@ -62,6 +62,7 @@ struct AsusSetupView: View {
 struct TPSetupView: View {
     let done: (TPCreds) -> Void
     @State private var host = "192.168.0.1"
+    @State private var username = ""
     @State private var password = ""
     @State private var working = false
     @State private var error: String?
@@ -72,10 +73,14 @@ struct TPSetupView: View {
                 Text("Uses the TP-Link's own web login (the password you use at its admin page). Only one session at a time is allowed, so if the web page is open somewhere, log out there first.")
                     .font(.subheadline).foregroundStyle(.secondary)
             }
-            Section("Router") {
+            Section {
                 TextField("Address", text: $host)
                     .keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
+                TextField("Account name (if it has one)", text: $username)
+                    .textInputAutocapitalization(.never).autocorrectionDisabled()
                 SecureField("Admin password", text: $password)
+            } footer: {
+                Text("Newer TP-Links (like the TL-WR1502X) sign you in with an account name as well as the password. Leave it empty for Archers that only ask for a password.")
             }
             if let error {
                 Section { Text(error).foregroundStyle(Theme.bad).font(.footnote) }
@@ -98,12 +103,12 @@ struct TPSetupView: View {
         working = true
         defer { working = false }
         error = nil
-        let c = TPLinkClient(host: host, password: password)
+        let c = TPLinkClient(host: host, password: password, username: username)
         do {
             try await c.login()
             _ = try? await c.status()   // repeater-mode firmware may not have every status page
             await c.logout()
-            done(TPCreds(host: host, password: password))
+            done(TPCreds(host: host, password: password, username: username.isEmpty ? nil : username))
         } catch {
             self.error = error.localizedDescription
         }

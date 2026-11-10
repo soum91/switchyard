@@ -15,7 +15,7 @@ final class TPLinkModel: ObservableObject {
     @Published var diagnosing: String?
     private var poller: Task<Void, Never>?
 
-    init(host: String, password: String) { client = TPLinkClient(host: host, password: password) }
+    init(host: String, password: String, username: String? = nil) { client = TPLinkClient(host: host, password: password, username: username) }
 
     func start() {
         poller?.cancel()

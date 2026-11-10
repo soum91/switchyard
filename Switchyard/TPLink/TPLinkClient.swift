@@ -19,7 +19,13 @@ final class TPLinkClient {
     private var jsonBody = false       // some firmware wants {"operation":"read"} instead of a form
     private var logged = false
 
-    init(host: String, password: String) {
+    /// The account name typed at setup, if any. It always wins over what the router reports.
+    let fixedUsername: String?
+
+    init(host: String, password: String, username: String? = nil) {
+        let u = username?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        fixedUsername = u.isEmpty ? nil : u
+        if let f = fixedUsername { self.username = f }
         var h = host.trimmingCharacters(in: .whitespacesAndNewlines)
         if !h.hasPrefix("http") { h = "http://" + h }
         while h.hasSuffix("/") { h.removeLast() }
@@ -82,7 +88,8 @@ final class TPLinkClient {
         passE = pw[1]
         plain = pw[0].count >= 512
         // Repeater-mode firmware reports its account name (often empty); the signature hash uses it.
-        if let u = data["username"] as? String, !forceAdmin { username = u } else if forceAdmin { username = "admin" }
+        if let f = fixedUsername { username = f }
+        else if let u = data["username"] as? String, !forceAdmin { username = u } else if forceAdmin { username = "admin" }
     }
     private var passN = ""
     private var passE = ""
@@ -103,7 +110,7 @@ final class TPLinkClient {
         } catch let e as TPError {
             // Repeater-mode firmware reports an empty account name. If the router turns that signature
             // down for anything other than a wrong password, try once more the classic way ("admin").
-            guard username.isEmpty, case .message(let m) = e, !m.hasPrefix("Wrong password"), !m.contains("refusing logins") else { throw e }
+            guard fixedUsername == nil, username.isEmpty, case .message(let m) = e, !m.hasPrefix("Wrong password"), !m.contains("refusing logins") else { throw e }
             forceAdmin = true
             try await loginOnce()
         }
@@ -525,10 +532,10 @@ extension TPLinkClient {
         forceAdmin = false
         do {
             try await loginOnce()
-            out.append("Login with the name the router reports (\(username.isEmpty ? "empty" : "\"\(username)\"")): OK")
+            out.append("Login with account name (\(username.isEmpty ? "empty" : "\"\(username)\"")): OK")
             out.append("  status_ipv4 with this login: " + (await rawCall("admin/network?form=status_ipv4", op: "read")))
         } catch {
-            out.append("Login with the name the router reports (\(username.isEmpty ? "empty" : "\"\(username)\"")): FAILED: \(error.localizedDescription)")
+            out.append("Login with account name (\(username.isEmpty ? "empty" : "\"\(username)\"")): FAILED: \(error.localizedDescription)")
         }
         forceAdmin = true
         do {
