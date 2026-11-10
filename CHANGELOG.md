@@ -1,5 +1,13 @@
 # Changelog
 
+## [build-18] - 2026-11-10
+
+## Verified changes since build-17
+
+- TP-Link: open the router's own page in Switchyard by default ([`42a972e4`](https://github.com/soum91/switchyard/commit/42a972e48e28138bf389101982ac6d80f9315857); `Switchyard/App/SetupViews.swift`, `Switchyard/App/SwitchyardApp.swift`, `Switchyard/App/Vault.swift`, and 2 more)
+
+[Inspect exact code changes](https://github.com/soum91/switchyard/compare/build-17...build-18)
+
 ## [build-17] - 2026-11-10
 
 ## Verified changes since build-16
