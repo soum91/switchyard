@@ -394,22 +394,36 @@ extension TPLinkClient {
         var queue = ["/webpages/index.html"]
         var seen = Set<String>()
         var found = Set<String>()
-        while let path = queue.first, seen.count < 80 {
+        fetched = []
+        Self.sourceStore = [:]
+        while let path = queue.first, seen.count < 120 {
             queue.removeFirst()
             guard seen.insert(path).inserted, let text = await fetchText(path) else { continue }
             for m in Self.matches(#"admin/[A-Za-z0-9_]+\?form=[A-Za-z0-9_]+"#, in: text) { found.insert(m) }
-            let dir = path.hasPrefix("/webpages/") ? "/webpages/" : "/"
             for ref in Self.matches(#"[A-Za-z0-9_./-]+\.(js|html)"#, in: text) {
                 guard !ref.contains("//"), !ref.hasPrefix("http") else { continue }
-                var p = ref
-                while p.hasPrefix("./") { p.removeFirst(2) }
-                if p.hasPrefix("../") { continue }
-                let full = p.hasPrefix("/") ? p : dir + p
-                if full.hasPrefix("/webpages/"), !seen.contains(full), !queue.contains(full) { queue.append(full) }
+                var cands: [String] = []
+                if let u = URL(string: ref, relativeTo: URL(string: "http://x" + path)) { cands.append(u.path) }
+                if !ref.hasPrefix("/"), !ref.hasPrefix(".") { cands.append("/webpages/" + ref) }
+                for full in cands where full.hasPrefix("/webpages/") && !seen.contains(full) && !queue.contains(full) {
+                    queue.append(full)
+                }
+            }
+            if text.count > 0 { fetched.append("\(path) (\(text.count) chars)") }
+            if path.hasSuffix("index.html") || text.contains("cgi-bin") || text.contains("stok") || text.contains("luci") {
+                Self.sourceStore[path] = text
             }
         }
         return (found.sorted(), seen.count)
     }
+
+    /// Every web UI file the last discovery could actually read.
+    private var fetched: [String] {
+        get { Self.fetchedStore[host] ?? [] }
+        set { Self.fetchedStore[host] = newValue }
+    }
+    private static var fetchedStore: [String: [String]] = [:]
+    private static var sourceStore: [String: String] = [:]
 
     /// One call with no retries and no login loop: what the router actually answered, decrypted.
     /// opInURL: put operation=… in the query; bodyOp: also put it in the (encrypted) body; json: body as JSON.
@@ -507,6 +521,25 @@ extension TPLinkClient {
     func diagnose(progress: @escaping (String) -> Void) async -> String {
         var out: [String] = []
         out.append("TP-Link at \(host)")
+        progress("Trying both login names…")
+        forceAdmin = false
+        do {
+            try await loginOnce()
+            out.append("Login with the name the router reports (\(username.isEmpty ? "empty" : "\"\(username)\"")): OK")
+            out.append("  status_ipv4 with this login: " + (await rawCall("admin/network?form=status_ipv4", op: "read")))
+        } catch {
+            out.append("Login with the name the router reports (\(username.isEmpty ? "empty" : "\"\(username)\"")): FAILED: \(error.localizedDescription)")
+        }
+        forceAdmin = true
+        do {
+            try await loginOnce()
+            out.append("Login as \"admin\": OK")
+            out.append("  status_ipv4 with this login: " + (await rawCall("admin/network?form=status_ipv4", op: "read")))
+        } catch {
+            out.append("Login as \"admin\": FAILED: \(error.localizedDescription)")
+        }
+        forceAdmin = false
+        logged = false
         do {
             if !logged { try await login() }
             out.append("Login: OK (account name \(username.isEmpty ? "empty" : "\"\(username)\""), \(plain ? "plain" : "encrypted") requests)")
@@ -542,10 +575,21 @@ extension TPLinkClient {
         let pages = (found + known.filter { !found.contains($0) })
             .filter { p in !skip.contains(where: { p.lowercased().contains($0) }) }
         out.append("")
+        out.append("Files read: " + fetched.joined(separator: ", "))
+        out.append("")
         out.append("Pages:")
         for (i, p) in pages.prefix(80).enumerated() {
             progress("Asking \(i + 1) of \(min(pages.count, 80)): \(p)")
             out.append("\(p) " + (await rawCall(p, op: "read")))
+        }
+        out.append("")
+        out.append("Web UI source that builds requests (index.html, and any file mentioning cgi-bin, stok or luci):")
+        var budget = 150_000
+        for (path, text) in Self.sourceStore.sorted(by: { $0.key < $1.key }) where budget > 0 {
+            let part = String(text.prefix(min(60_000, budget)))
+            budget -= part.count
+            out.append("----- \(path) (\(text.count) chars) -----")
+            out.append(part)
         }
         return out.joined(separator: "\n")
     }
