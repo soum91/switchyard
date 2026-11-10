@@ -20,6 +20,15 @@
       "screenshotURLs": [],
       "versions": [
         {
+          "version": "1.0.0.19",
+          "buildVersion": "19",
+          "date": "2026-11-10T07:49:18Z",
+          "localizedDescription": "- TP-Link: note which pages the router's own interface uses (17b6b78)\n- docs: record factual changes for build-18 [skip ci] (8801e9a)",
+          "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-19/Switchyard-1.0.0-build-19.ipa",
+          "size": 909154,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "1.0.0.18",
           "buildVersion": "18",
           "date": "2026-11-10T07:40:25Z",
@@ -182,11 +191,11 @@
           "minOSVersion": "17.0"
         }
       ],
-      "version": "1.0.0.18",
-      "versionDate": "2026-11-10T07:40:25Z",
-      "versionDescription": "- TP-Link: open the router's own page in Switchyard by default (42a972e)\n- docs: record factual changes for build-17 [skip ci] (94cefdc)",
-      "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-18/Switchyard-1.0.0-build-18.ipa",
-      "size": 895386,
+      "version": "1.0.0.19",
+      "versionDate": "2026-11-10T07:49:18Z",
+      "versionDescription": "- TP-Link: note which pages the router's own interface uses (17b6b78)\n- docs: record factual changes for build-18 [skip ci] (8801e9a)",
+      "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-19/Switchyard-1.0.0-build-19.ipa",
+      "size": 909154,
       "appPermissions": {}
     }
   ],
