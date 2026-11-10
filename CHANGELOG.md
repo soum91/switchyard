@@ -1,5 +1,13 @@
 # Changelog
 
+## [build-21] - 2026-11-10
+
+## Verified changes since build-20
+
+- TP-Link: Diagnose from the setup screen when login gives no working session ([`115879e7`](https://github.com/soum91/switchyard/commit/115879e762fcbb0ace46f42b0c7a48cfe2321380); `Switchyard/App/SetupViews.swift`, `Switchyard/TPLink/TPLinkClient.swift`)
+
+[Inspect exact code changes](https://github.com/soum91/switchyard/compare/build-20...build-21)
+
 ## [build-20] - 2026-11-10
 
 ## Verified changes since build-19
