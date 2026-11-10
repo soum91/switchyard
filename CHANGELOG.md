@@ -1,5 +1,13 @@
 # Changelog
 
+## [build-13] - 2026-11-10
+
+## Verified changes since build-12
+
+- TP-Link: add Diagnose this router (read-only page discovery with checked Copy, Share, Save) ([`12f3fa08`](https://github.com/soum91/switchyard/commit/12f3fa0896122580e72d50743b392eca195bf43c); `Switchyard/App/DiagnosticReport.swift`, `Switchyard/TPLink/TPLinkClient.swift`, `Switchyard/TPLink/TPLinkViews.swift`)
+
+[Inspect exact code changes](https://github.com/soum91/switchyard/compare/build-12...build-13)
+
 ## [build-12] - 2026-11-10
 
 ## Verified changes since build-11
