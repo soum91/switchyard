@@ -20,6 +20,15 @@
       "screenshotURLs": [],
       "versions": [
         {
+          "version": "1.0.0.17",
+          "buildVersion": "17",
+          "date": "2026-11-10T07:29:22Z",
+          "localizedDescription": "- TP-Link: show why the dashboard is empty; fix squished loading screen (94428b6)\n- docs: record factual changes for build-16 [skip ci] (1ce4e7c)",
+          "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-17/Switchyard-1.0.0-build-17.ipa",
+          "size": 867617,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "1.0.0.16",
           "buildVersion": "16",
           "date": "2026-11-10T07:05:18Z",
@@ -164,11 +173,11 @@
           "minOSVersion": "17.0"
         }
       ],
-      "version": "1.0.0.16",
-      "versionDate": "2026-11-10T07:05:18Z",
-      "versionDescription": "- TP-Link: account name field at setup (TL-WR1502X signs in with name + password) (f09502d)\n- docs: record factual changes for build-15 [skip ci] (a708f50)",
-      "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-16/Switchyard-1.0.0-build-16.ipa",
-      "size": 863677,
+      "version": "1.0.0.17",
+      "versionDate": "2026-11-10T07:29:22Z",
+      "versionDescription": "- TP-Link: show why the dashboard is empty; fix squished loading screen (94428b6)\n- docs: record factual changes for build-16 [skip ci] (1ce4e7c)",
+      "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-17/Switchyard-1.0.0-build-17.ipa",
+      "size": 867617,
       "appPermissions": {}
     }
   ],
