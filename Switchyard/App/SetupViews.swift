@@ -68,6 +68,8 @@ struct TPSetupView: View {
     @State private var password = ""
     @State private var working = false
     @State private var error: String?
+    @State private var report: String?
+    @State private var diagnosing = false
 
     var body: some View {
         Form {
@@ -88,7 +90,17 @@ struct TPSetupView: View {
                 if webPage { Text("Shows the TP-Link's own web page here. It asks for its login itself.") }
             }
             if let error {
-                Section { Text(error).foregroundStyle(Theme.bad).font(.footnote) }
+                Section {
+                    Text(error).foregroundStyle(Theme.bad).font(.footnote)
+                    if archer {
+                        Button {
+                            Task { await diagnose() }
+                        } label: {
+                            HStack { Text("Diagnose (makes a report to send)"); if diagnosing { Spacer(); ProgressView() } }
+                        }
+                        .disabled(diagnosing)
+                    }
+                }
             }
             Section {
                 Button {
@@ -102,6 +114,17 @@ struct TPSetupView: View {
         .scrollContentBackground(.hidden)
         .background(Theme.background)
         .navigationTitle("Add the TP-Link")
+        .sheet(isPresented: Binding(get: { report != nil }, set: { if !$0 { report = nil } })) {
+            DiagnosticReportView(title: "TP-Link diagnosis", report: report ?? "", filename: "switchyard-tplink-diagnosis.txt")
+        }
+    }
+
+    private func diagnose() async {
+        diagnosing = true
+        defer { diagnosing = false }
+        let c = TPLinkClient(host: host.trimmingCharacters(in: .whitespacesAndNewlines), password: password, username: username)
+        report = await c.diagnose { _ in }
+        await c.logout()
     }
 
     private func connect() async {

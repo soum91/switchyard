@@ -142,6 +142,7 @@ final class TPLinkClient {
         throw TPError.message("The TP-Link took the password but gave no working session. " + notes.joined(separator: "; "))
     }
     private var override: String?
+    private var lastLoginHeaders = "(none yet)"
     private var workingName: String?
     private(set) var reportedName: String?
     private(set) var mode: String?
@@ -185,6 +186,10 @@ final class TPLinkClient {
             throw TPError.message("Login failed.")
         }
         stok = s
+        lastLoginHeaders = resp.allHeaderFields.map { k, v in
+            let key = "\(k)"
+            return key.lowercased() == "set-cookie" ? "\(key): " + "\(v)".replacingOccurrences(of: #"=[^;,]+"#, with: "=<redacted>", options: .regularExpression) : "\(key): \(v)"
+        }.sorted().joined(separator: " | ")
         // Send back every cookie the login set (the session cookie isn't always called "sysauth").
         if let url = resp.url {
             let fields = resp.allHeaderFields.reduce(into: [String: String]()) { $0["\($1.key)"] = "\($1.value)" }
@@ -529,7 +534,8 @@ extension TPLinkClient {
                 }
             }
             if text.count > 0 { fetched.append("\(path) (\(text.count) chars)") }
-            if path.hasSuffix("index.html") || text.contains("cgi-bin") || text.contains("stok") || text.contains("luci") {
+            if path.hasSuffix("index.html") || text.contains("cgi-bin") || text.contains("stok") || text.contains("luci")
+                || text.contains("encrypt") || text.contains("sign") {
                 Self.sourceStore[path] = text
             }
         }
@@ -665,7 +671,6 @@ extension TPLinkClient {
             out.append("Login: OK (account name \(username.isEmpty ? "empty" : "\"\(username)\""), \(plain ? "plain" : "encrypted") requests)")
         } catch {
             out.append("Login: FAILED: \(error.localizedDescription)")
-            return out.joined(separator: "\n")
         }
         progress("Reading the router's web pages…")
         let (found, files) = await discoverPages()
@@ -703,8 +708,12 @@ extension TPLinkClient {
             out.append("\(p) " + (await rawCall(p, op: "read")))
         }
         out.append("")
-        out.append("Web UI source that builds requests (index.html, and any file mentioning cgi-bin, stok or luci):")
-        var budget = 150_000
+        for extra in ["/webpages/modules/login/script.js", "/webpages/modules/main/main.js", "/webpages/config/modules.json", "/webpages/config.json"] {
+            if Self.sourceStore[extra] == nil, let t = await fetchText(extra) { Self.sourceStore[extra] = t }
+        }
+        out.append("Login response headers: " + lastLoginHeaders)
+        out.append("Web UI source that builds requests (index.html, the login and main modules, and any file mentioning cgi-bin, stok, luci, encrypt or sign):")
+        var budget = 400_000
         for (path, text) in Self.sourceStore.sorted(by: { $0.key < $1.key }) where budget > 0 {
             let part = String(text.prefix(min(60_000, budget)))
             budget -= part.count
