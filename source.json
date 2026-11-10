@@ -20,6 +20,15 @@
       "screenshotURLs": [],
       "versions": [
         {
+          "version": "1.0.0.20",
+          "buildVersion": "20",
+          "date": "2026-11-10T08:05:48Z",
+          "localizedDescription": "- TP-Link: native dashboard for TL-WR1502X in repeater mode (7ae293b)\n- docs: record factual changes for build-19 [skip ci] (aaa67e9)",
+          "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-20/Switchyard-1.0.0-build-20.ipa",
+          "size": 931828,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "1.0.0.19",
           "buildVersion": "19",
           "date": "2026-11-10T07:49:18Z",
@@ -191,11 +200,11 @@
           "minOSVersion": "17.0"
         }
       ],
-      "version": "1.0.0.19",
-      "versionDate": "2026-11-10T07:49:18Z",
-      "versionDescription": "- TP-Link: note which pages the router's own interface uses (17b6b78)\n- docs: record factual changes for build-18 [skip ci] (8801e9a)",
-      "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-19/Switchyard-1.0.0-build-19.ipa",
-      "size": 909154,
+      "version": "1.0.0.20",
+      "versionDate": "2026-11-10T08:05:48Z",
+      "versionDescription": "- TP-Link: native dashboard for TL-WR1502X in repeater mode (7ae293b)\n- docs: record factual changes for build-19 [skip ci] (aaa67e9)",
+      "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-20/Switchyard-1.0.0-build-20.ipa",
+      "size": 931828,
       "appPermissions": {}
     }
   ],
