@@ -195,6 +195,8 @@ final class TPLinkClient {
         }
         let (d, resp) = result
         if resp.statusCode == 401 || resp.statusCode == 403 { throw TPNeedsLogin.again }
+        // A missing page (404) isn't a lost session: don't log in again for it.
+        if resp.statusCode == 404 { throw TPError.message("This TP-Link doesn't have that page (\(path)).") }
         var bare: [String: Any]?
         if Self.object(d) == nil, !plain, !d.isEmpty,
            let dec = try? session.decrypt(String(decoding: d, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)) {
@@ -298,7 +300,10 @@ extension TPLinkClient {
     }
 
     func status() async throws -> TPStatus {
-        let d = ((try? await request("admin/status?form=all", "operation=read")) as? [String: Any]) ?? [:]
+        var d: [String: Any] = [:]
+        var firstError: Error?
+        do { d = (try await request("admin/status?form=all", "operation=read")) as? [String: Any] ?? [:] }
+        catch { firstError = error }
         var s = TPStatus()
         s.wanIP = Self.str(d["wan_ipv4_ipaddr"])
         s.wanGateway = Self.str(d["wan_ipv4_gateway"])
@@ -331,6 +336,8 @@ extension TPLinkClient {
             s.cpu = Self.num(p["cpu_usage"])
             s.mem = Self.num(p["mem_usage"])
         }
+        // Nothing readable at all: say why instead of showing an empty dashboard.
+        if let firstError, d.isEmpty, s.cpu == nil { throw firstError }
         return s
     }
 

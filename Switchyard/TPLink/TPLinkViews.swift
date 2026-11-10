@@ -20,6 +20,7 @@ final class TPLinkModel: ObservableObject {
     func start() {
         poller?.cancel()
         poller = Task { [weak self] in
+            await self?.refresh()
             await self?.loadExtras()
             while !Task.isCancelled {
                 await self?.refresh()
@@ -109,7 +110,9 @@ struct TPLinkDashboard: View {
                 }
             }
             .padding(16)
+            .frame(maxWidth: .infinity)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.background)
         .navigationTitle(model.firmware?.model ?? "TP-Link")
         .refreshable { await model.refresh(); await model.loadWifi() }
