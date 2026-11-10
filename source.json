@@ -20,6 +20,15 @@
       "screenshotURLs": [],
       "versions": [
         {
+          "version": "1.0.0.13",
+          "buildVersion": "13",
+          "date": "2026-11-10T05:31:29Z",
+          "localizedDescription": "- TP-Link: add Diagnose this router (read-only page discovery with checked Copy, Share, Save) (12f3fa0)\n- docs: record factual changes for build-12 [skip ci] (b25fbbc)",
+          "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-13/Switchyard-1.0.0-build-13.ipa",
+          "size": 847396,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "1.0.0.12",
           "buildVersion": "12",
           "date": "2026-11-10T05:17:44Z",
@@ -128,11 +137,11 @@
           "minOSVersion": "17.0"
         }
       ],
-      "version": "1.0.0.12",
-      "versionDate": "2026-11-10T05:17:44Z",
-      "versionDescription": "- TP-Link: log in to travel routers in repeater mode (TL-WR1502X) (4427410)\n- docs: require verified diagnostic exports [skip ci] (871d6b3)\n- docs: require verified diagnostic exports [skip ci] (d7b9448)\n- docs: require verified diagnostics Copy, Share and Files export [skip ci] (dd84208)\n- docs: require verified diagnostics Copy, Share and Files export [skip ci] (b8953b9)\n- ci: separate release tracks when deriving factual changes [skip ci] (20d2bff)\n- ci: reconcile bot-created releases with factual notes [skip ci] (7bc340e)\n- ci: verify and record actual release changes [skip ci] (565775c)\n- docs: require evidence-based release changelog [skip ci] (ef88799)\n- docs: initialize factual release changelog [skip ci] (5ae99d9)",
-      "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-12/Switchyard-1.0.0-build-12.ipa",
-      "size": 804053,
+      "version": "1.0.0.13",
+      "versionDate": "2026-11-10T05:31:29Z",
+      "versionDescription": "- TP-Link: add Diagnose this router (read-only page discovery with checked Copy, Share, Save) (12f3fa0)\n- docs: record factual changes for build-12 [skip ci] (b25fbbc)",
+      "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-13/Switchyard-1.0.0-build-13.ipa",
+      "size": 847396,
       "appPermissions": {}
     }
   ],
