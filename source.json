@@ -20,6 +20,15 @@
       "screenshotURLs": [],
       "versions": [
         {
+          "version": "1.0.0.26",
+          "buildVersion": "26",
+          "date": "2026-11-11T02:27:26Z",
+          "localizedDescription": "- TP-Link: drive newer firmware through its own page (invisible web view) (ea73082)\n- docs: record factual changes for build-25 [skip ci] (beb4b03)",
+          "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-26/Switchyard-1.0.0-build-26.ipa",
+          "size": 989894,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "1.0.0.25",
           "buildVersion": "25",
           "date": "2026-11-11T02:14:56Z",
@@ -234,22 +243,13 @@
           "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-2/Switchyard-1.0.0-build-2.ipa",
           "size": 682374,
           "minOSVersion": "17.0"
-        },
-        {
-          "version": "1.0.0.1",
-          "buildVersion": "1",
-          "date": "2026-10-30T17:59:55Z",
-          "localizedDescription": "- Switchyard: ASUS (OpenWrt) and TP-Link control in one app, plus the router plugin (d325c5b)\n- Initial commit (95755ea)",
-          "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-1/Switchyard-1.0.0-build-1.ipa",
-          "size": 681923,
-          "minOSVersion": "17.0"
         }
       ],
-      "version": "1.0.0.25",
-      "versionDate": "2026-11-11T02:14:56Z",
-      "versionDescription": "- TP-Link: 'Get the router's web code (no login)' on the setup screen (0b2d14a)\n- docs: record factual changes for build-24 [skip ci] (7d42ad5)",
-      "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-25/Switchyard-1.0.0-build-25.ipa",
-      "size": 965663,
+      "version": "1.0.0.26",
+      "versionDate": "2026-11-11T02:27:26Z",
+      "versionDescription": "- TP-Link: drive newer firmware through its own page (invisible web view) (ea73082)\n- docs: record factual changes for build-25 [skip ci] (beb4b03)",
+      "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-26/Switchyard-1.0.0-build-26.ipa",
+      "size": 989894,
       "appPermissions": {}
     }
   ],
