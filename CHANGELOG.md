@@ -1,5 +1,13 @@
 # Changelog
 
+## [build-22] - 2026-11-11
+
+## Verified changes since build-21
+
+- TP-Link: try operation only in the encrypted body, as the TL-WR1502X's page does ([`f30f860b`](https://github.com/soum91/switchyard/commit/f30f860bfdb2c4d29d9a73302f5edb92f1e3e9c5); `Switchyard/TPLink/TPLinkClient.swift`)
+
+[Inspect exact code changes](https://github.com/soum91/switchyard/compare/build-21...build-22)
+
 ## [build-21] - 2026-11-10
 
 ## Verified changes since build-20
