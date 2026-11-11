@@ -20,6 +20,15 @@
       "screenshotURLs": [],
       "versions": [
         {
+          "version": "1.0.0.22",
+          "buildVersion": "22",
+          "date": "2026-11-11T00:47:05Z",
+          "localizedDescription": "- TP-Link: try operation only in the encrypted body, as the TL-WR1502X's page does (f30f860)\n- router/tailscale.sh: print the login link, not tailscale's UDP GRO notice [skip ci] (91cb08d)\n- router/tailscale.sh: handle LAN address stored as CIDR (192.168.1.1/24) [skip ci] (5d6d371)\n- router/tailscale.sh: don't fail on apk's post-install '1 error' [skip ci] (9cbaed5)\n- router: one-line Tailscale remote access setup [skip ci] (dbd01c3)\n- docs: record factual changes for build-21 [skip ci] (7e0d67f)",
+          "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-22/Switchyard-1.0.0-build-22.ipa",
+          "size": 945858,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "1.0.0.21",
           "buildVersion": "21",
           "date": "2026-11-10T08:21:36Z",
@@ -209,11 +218,11 @@
           "minOSVersion": "17.0"
         }
       ],
-      "version": "1.0.0.21",
-      "versionDate": "2026-11-10T08:21:36Z",
-      "versionDescription": "- TP-Link: Diagnose from the setup screen when login gives no working session (115879e)\n- docs: record factual changes for build-20 [skip ci] (1559bf1)\n- Enforce pseudonymous author metadata and owner privacy (f8180f8)",
-      "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-21/Switchyard-1.0.0-build-21.ipa",
-      "size": 945616,
+      "version": "1.0.0.22",
+      "versionDate": "2026-11-11T00:47:05Z",
+      "versionDescription": "- TP-Link: try operation only in the encrypted body, as the TL-WR1502X's page does (f30f860)\n- router/tailscale.sh: print the login link, not tailscale's UDP GRO notice [skip ci] (91cb08d)\n- router/tailscale.sh: handle LAN address stored as CIDR (192.168.1.1/24) [skip ci] (5d6d371)\n- router/tailscale.sh: don't fail on apk's post-install '1 error' [skip ci] (9cbaed5)\n- router: one-line Tailscale remote access setup [skip ci] (dbd01c3)\n- docs: record factual changes for build-21 [skip ci] (7e0d67f)",
+      "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-22/Switchyard-1.0.0-build-22.ipa",
+      "size": 945858,
       "appPermissions": {}
     }
   ],
