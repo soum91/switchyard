@@ -52,7 +52,19 @@ IP=$(uci -q get network.lan.ipaddr)
 MASK=$(uci -q get network.lan.netmask)
 case "$IP" in */*) MASK=${IP#*/}; IP=${IP%/*} ;; esac
 [ -n "$IP" ] || die "couldn't read the LAN address"
-eval "$(/bin/ipcalc.sh "$IP" "${MASK:-255.255.255.0}")"
+# 25.12 stores the LAN as 192.168.1.1/24; ipcalc.sh wants a dotted mask, so turn "24" into 255.255.255.0
+case "$MASK" in
+	*.*) ;;
+	"") MASK=255.255.255.0 ;;
+	*) p=$MASK; m=""
+	   for i in 1 2 3 4; do
+		if [ "$p" -ge 8 ]; then o=255; p=$((p - 8)); else o=$((256 - (1 << (8 - p)))); p=0; fi
+		m="$m${m:+.}$o"
+	   done
+	   MASK=$m ;;
+esac
+eval "$(/bin/ipcalc.sh "$IP" "$MASK")"
+[ -n "$NETWORK" ] && [ -n "$PREFIX" ] || die "couldn't work out the LAN subnet from $IP $MASK"
 ROUTE="$NETWORK/$PREFIX"
 
 # 4. Start it and sign in
