@@ -1,5 +1,13 @@
 # Changelog
 
+## [build-23] - 2026-11-11
+
+## Verified changes since build-22
+
+- TP-Link: support the newer signing scheme (SHA-256, RSA-OAEP login, HMAC-SHA256 requests) ([`f06c2ff4`](https://github.com/soum91/switchyard/commit/f06c2ff4f2960449fa138c5b9662ce66771f11e6); `Switchyard/TPLink/TPCrypto.swift`, `Switchyard/TPLink/TPLinkClient.swift`)
+
+[Inspect exact code changes](https://github.com/soum91/switchyard/compare/build-22...build-23)
+
 ## [build-22] - 2026-11-11
 
 ## Verified changes since build-21
