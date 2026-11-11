@@ -148,12 +148,18 @@ final class TPLinkClient {
     private(set) var mode: String?
     var isRepeater: Bool { mode == "repeater" }
 
+    /// Archers want operation=… in the URL too; the TL-WR1502X's own page sends it only inside the
+    /// encrypted body. Try both and keep whichever this router answers.
     private func sessionWorks() async -> Bool {
-        for p in ["admin/status?form=internet", "admin/firmware?form=upgrade", "admin/status?form=all"] {
-            if (try? await send(p, "operation=read")) != nil { return true }
+        for style in [opInURL, !opInURL] {
+            opInURL = style
+            for p in ["admin/status?form=internet", "admin/firmware?form=upgrade", "admin/status?form=all"] {
+                if (try? await send(p, "operation=read")) != nil { return true }
+            }
         }
         return false
     }
+    private var opInURL = true
     private var forceAdmin = false
 
     private func loginOnce() async throws {
@@ -218,7 +224,7 @@ final class TPLinkClient {
     private func send(_ path: String, _ data: String) async throws -> Any {
         let op = data.split(separator: "&").first(where: { $0.hasPrefix("operation=") }).map(String.init)
         var p = path
-        if let op, !p.contains("operation=") { p += (p.contains("?") ? "&" : "?") + op }
+        if opInURL, let op, !p.contains("operation=") { p += (p.contains("?") ? "&" : "?") + op }
         let payload: String
         if jsonBody {
             var dict: [String: String] = [:]
