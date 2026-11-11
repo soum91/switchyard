@@ -1,5 +1,13 @@
 # Changelog
 
+## [build-24] - 2026-11-11
+
+## Verified changes since build-23
+
+- TP-Link: fewer login attempts per connect (avoid the router's lockout) ([`0295a1f9`](https://github.com/soum91/switchyard/commit/0295a1f9faef3303b909c858c0db9bfe749c26ed); `Switchyard/TPLink/TPLinkClient.swift`)
+
+[Inspect exact code changes](https://github.com/soum91/switchyard/compare/build-23...build-24)
+
 ## [build-23] - 2026-11-11
 
 ## Verified changes since build-22
