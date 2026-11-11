@@ -1,5 +1,13 @@
 # Changelog
 
+## [build-26] - 2026-11-11
+
+## Verified changes since build-25
+
+- TP-Link: drive newer firmware through its own page (invisible web view) ([`ea730821`](https://github.com/soum91/switchyard/commit/ea7308213930b16d0aab991e5182d59c2040f43a); `Switchyard/TPLink/TPLinkClient.swift`, `Switchyard/TPLink/TPWebBridge.swift`)
+
+[Inspect exact code changes](https://github.com/soum91/switchyard/compare/build-25...build-26)
+
 ## [build-25] - 2026-11-11
 
 ## Verified changes since build-24
