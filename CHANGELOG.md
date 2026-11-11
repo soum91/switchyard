@@ -1,5 +1,13 @@
 # Changelog
 
+## [build-25] - 2026-11-11
+
+## Verified changes since build-24
+
+- TP-Link: 'Get the router's web code (no login)' on the setup screen ([`0b2d14a3`](https://github.com/soum91/switchyard/commit/0b2d14a31c7c37d460f2f79f929301a8f49bd9a5); `Switchyard/App/SetupViews.swift`, `Switchyard/TPLink/TPLinkClient.swift`)
+
+[Inspect exact code changes](https://github.com/soum91/switchyard/compare/build-24...build-25)
+
 ## [build-24] - 2026-11-11
 
 ## Verified changes since build-23
