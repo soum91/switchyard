@@ -13,7 +13,10 @@ if ! command -v tailscale >/dev/null 2>&1; then
 	[ -n "$FREE" ] && [ "$FREE" -lt 30000 ] && die "only $((FREE / 1024)) MB free on the router; Tailscale needs about 30 MB"
 	say "installing tailscale"
 	apk update >/dev/null 2>&1
-	apk add tailscale || die "couldn't install tailscale"
+	# The package's install script runs "tailscaled --cleanup", which can exit non-zero on OpenWrt
+	# (no iptables) and makes apk report "1 error" even though everything installed.
+	apk add tailscale
+	command -v tailscale >/dev/null 2>&1 || die "couldn't install tailscale"
 fi
 uci -q get tailscale.settings >/dev/null && uci set tailscale.settings.fw_mode='nftables' && uci commit tailscale
 
