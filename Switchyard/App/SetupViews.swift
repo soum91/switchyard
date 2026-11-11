@@ -84,6 +84,23 @@ struct TPSetupView: View {
             } header: { Text("Router") } footer: {
                 if archer { Text("Works with Archers and travel routers like the TL-WR1502X (router or repeater mode). Only one login at a time is allowed, so log out of its web page first.") }
             }
+            if archer && !host.isEmpty {
+                Section {
+                    Button {
+                        Task {
+                            diagnosing = true
+                            defer { diagnosing = false }
+                            let c = TPLinkClient(host: host.trimmingCharacters(in: .whitespacesAndNewlines), password: "", username: nil)
+                            report = await c.webCodeReport { _ in }
+                        }
+                    } label: {
+                        HStack { Text("Get the router's web code (no login)"); if diagnosing { Spacer(); ProgressView() } }
+                    }
+                    .disabled(diagnosing)
+                } footer: {
+                    Text("Reads only the router's public page files to match its login exactly. Never logs in, so it can't lock you out.")
+                }
+            }
             Section {
                 Toggle("Use the router's own page instead", isOn: $webPage)
             } footer: {

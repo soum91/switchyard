@@ -757,3 +757,62 @@ extension TPLinkClient {
         return out.joined(separator: "\n")
     }
 }
+
+// MARK: - The router's own login/crypto code (static files, no login, no lockout risk)
+
+extension TPLinkClient {
+    /// Pulls the web UI's request and crypto code (around encrypt, sign, seq, hash, RSA…) so the exact
+    /// signing scheme can be matched. Reads public static files only; never logs in.
+    func webCodeReport(progress: @escaping (String) -> Void) async -> String {
+        var out = ["TP-Link at \(host): web UI crypto and request code (static files, no login)."]
+        progress("Reading the router's page…")
+        guard let index = await fetchText("/webpages/index.html") else {
+            return (out + ["Couldn't read /webpages/index.html."]).joined(separator: "\n")
+        }
+        if let v = Self.matches(#"name="version" content="[^"]*""#, in: index).first { out.append(v) }
+        var files: [String] = []
+        for src in Self.matches(#"\./js/[A-Za-z0-9_.-]+\.js"#, in: index) { files.append("/webpages/" + String(src.dropFirst(2))) }
+        var queue = files
+        var seen = Set<String>()
+        var texts: [(String, String)] = []
+        while let f = queue.first, seen.count < 12 {
+            queue.removeFirst()
+            guard seen.insert(f).inserted else { continue }
+            progress("Reading \(f)…")
+            guard let t = await fetchText(f) else { out.append("missing: \(f)"); continue }
+            texts.append((f, t))
+            for m in Self.matches(#"\./(su|vendor|update-store|index)-[A-Za-z0-9_-]+\.js"#, in: t) {
+                let p = "/webpages/js/" + String(m.dropFirst(2))
+                if !seen.contains(p), !queue.contains(p) { queue.append(p) }
+            }
+        }
+        let keys = ["encrypt", "decrypt", "sign", "seq", "md5", "MD5", "sha256", "SHA256", "Hmac", "HMAC", "RSA", "rsa", "OAEP",
+                    "setPublic", "login?form", "stok", "hash", "username", "AES", "aes", "iv", "certification", "device_config"]
+        let pattern = "(" + keys.map { NSRegularExpression.escapedPattern(for: $0) }.joined(separator: "|") + ")"
+        guard let re = try? NSRegularExpression(pattern: pattern) else { return out.joined(separator: "\n") }
+        var budget = 260_000
+        for (f, t) in texts {
+            let ns = t as NSString
+            var ranges: [NSRange] = []
+            for m in re.matches(in: t, range: NSRange(location: 0, length: ns.length)) {
+                let r = NSRange(location: max(0, m.range.location - 260), length: 0)
+                let end = min(ns.length, m.range.location + m.range.length + 260)
+                let span = NSRange(location: r.location, length: end - r.location)
+                if let last = ranges.last, span.location <= last.location + last.length {
+                    ranges[ranges.count - 1] = NSRange(location: last.location, length: max(last.location + last.length, end) - last.location)
+                } else {
+                    ranges.append(span)
+                }
+            }
+            out.append("")
+            out.append("----- \(f) (\(t.count) chars, \(ranges.count) snippets) -----")
+            for r in ranges where budget > 0 {
+                let s = ns.substring(with: r).replacingOccurrences(of: "\n", with: " ")
+                budget -= s.count
+                out.append("@\(r.location): " + s)
+            }
+        }
+        if budget <= 0 { out.append("(cut off at the size limit)") }
+        return out.joined(separator: "\n")
+    }
+}
