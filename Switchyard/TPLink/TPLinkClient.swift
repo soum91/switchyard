@@ -117,9 +117,10 @@ final class TPLinkClient {
             if await sessionWorks() { return }
             workingName = nil
         }
+        // Keep logins few: TP-Links lock you out after a handful of tries. The name the router reports
+        // ("admin" when it reports none), then a typed one if any.
         var names: [String?] = [nil]
         if let f = fixedUsername { names.append(f) }
-        names.append("admin")
         var notes: [String] = []
         // Newer firmware (certified builds, 2025 travel routers) signs with SHA-256, OAEP and HMAC
         // instead of MD5 and plain RSA. Ask the router; if it doesn't say, try both.
