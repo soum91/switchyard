@@ -79,8 +79,8 @@ else
 	rm -f /tmp/ts-up.log
 	( tailscale up --advertise-routes="$ROUTE" --accept-dns=false >/tmp/ts-up.log 2>&1 & )
 	i=0
-	while [ $i -lt 30 ] && ! grep -q "https://" /tmp/ts-up.log 2>/dev/null; do sleep 1; i=$((i + 1)); done
-	URL=$(grep -o "https://[^ ]*" /tmp/ts-up.log | head -1)
+	while [ $i -lt 30 ] && ! grep -q "https://login.tailscale.com" /tmp/ts-up.log 2>/dev/null; do sleep 1; i=$((i + 1)); done
+	URL=$(grep -o "https://login.tailscale.com/[^ ]*" /tmp/ts-up.log | head -1)
 	[ -n "$URL" ] || die "tailscale didn't give a sign-in link; output: $(cat /tmp/ts-up.log)"
 	echo
 	say "open this link on your phone and sign in:"
