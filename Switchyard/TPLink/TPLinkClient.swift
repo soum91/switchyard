@@ -120,28 +120,49 @@ final class TPLinkClient {
         var names: [String?] = [nil]
         if let f = fixedUsername { names.append(f) }
         names.append("admin")
-        var used = Set<String>()
         var notes: [String] = []
-        for n in names {
-            if let n, used.contains(n) { continue }
-            override = n
-            do {
-                try await loginOnce()
-                if used.contains(username) { continue }
-                used.insert(username)
-                if await sessionWorks() { workingName = username; return }
-                notes.append("name \"\(username)\": signed in, but the session can't read anything")
-            } catch {
-                let name = n ?? username
-                used.insert(name)
-                if case TPError.message(let m) = error, m.hasPrefix("Wrong password") || m.contains("refusing") { throw error }
-                notes.append("name \"\(name)\": \(error.localizedDescription)")
+        // Newer firmware (certified builds, 2025 travel routers) signs with SHA-256, OAEP and HMAC
+        // instead of MD5 and plain RSA. Ask the router; if it doesn't say, try both.
+        let certified = await isCertifiedFirmware()
+        for scheme in (certified ? [true, false] : [false, true]) {
+            sg = scheme
+            var used = Set<String>()
+            for n in names {
+                if let n, used.contains(n) { continue }
+                override = n
+                let label = scheme ? "newer signing" : "classic signing"
+                do {
+                    try await loginOnce()
+                    if used.contains(username) { continue }
+                    used.insert(username)
+                    if await sessionWorks() { workingName = username; return }
+                    notes.append("\(label), name \"\(username)\": signed in, but the session can't read anything")
+                } catch {
+                    let name = n ?? username
+                    used.insert(name)
+                    if case TPError.message(let m) = error, m.hasPrefix("Wrong password") || m.contains("refusing") { throw error }
+                    notes.append("\(label), name \"\(name)\": \(error.localizedDescription)")
+                }
             }
         }
         logged = false
         throw TPError.message("The TP-Link took the password but gave no working session. " + notes.joined(separator: "; "))
     }
     private var override: String?
+    /// Newer TP-Link signing (SHA-256 + OAEP login, HMAC-SHA256 requests).
+    private(set) var sg = false
+
+    private func isCertifiedFirmware() async -> Bool {
+        guard let (d, _) = try? await post("/device_config?form=config", body: "operation=read"),
+              let o = Self.object(d), let data = o["data"] as? [String: Any],
+              let certs = data["certification"] as? [String] else { return false }
+        return certs.contains { $0.contains("SG CLS L1") || $0.contains("CE RED") }
+    }
+
+    private func requestSign(_ enc: String) throws -> String {
+        if sg { return session.sgRequestSign(seq: seq + enc.count, hash: TPCrypto.sha256Hex(enc)) }
+        return try session.sign(seq: seq + enc.count, login: false, hash: hash, nHex: signN, eHex: signE)
+    }
     private var lastLoginHeaders = "(none yet)"
     private var workingName: String?
     private(set) var reportedName: String?
@@ -166,7 +187,7 @@ final class TPLinkClient {
         logged = false
         stok = ""
         sysauth = ""
-        session = TPSession()
+        session = TPSession(digits: sg)
         try await keys()
         let pwHex = try TPCrypto.rsaPKCS1(Array(password.utf8), nHex: passN, eHex: passE)
         let result: (Data, HTTPURLResponse)
@@ -175,7 +196,9 @@ final class TPLinkClient {
         } else {
             try await auth()
             let enc = try session.encrypt("operation=login&password=\(pwHex)&confirm=true")
-            let sign = try session.sign(seq: seq + enc.count, login: true, hash: hash, nHex: signN, eHex: signE)
+            let sign = sg
+                ? try session.sgLoginSign(seq: seq + enc.count, hash: TPCrypto.sha256Hex(username + password), nHex: signN, eHex: signE)
+                : try session.sign(seq: seq + enc.count, login: true, hash: hash, nHex: signN, eHex: signE)
             result = try await post("/login?form=login", body: "sign=\(sign)&data=\(Self.form(enc))")
         }
         let (d, resp) = result
@@ -241,7 +264,7 @@ final class TPLinkClient {
             result = try await post("/" + stokPath(p), body: payload, contentType: jsonBody ? "application/json" : "application/x-www-form-urlencoded")
         } else {
             let enc = try session.encrypt(payload)
-            let sign = try session.sign(seq: seq + enc.count, login: false, hash: hash, nHex: signN, eHex: signE)
+            let sign = try requestSign(enc)
             result = try await post("/" + stokPath(p), body: "sign=\(sign)&data=\(Self.form(enc))")
         }
         let (d, resp) = result
@@ -567,11 +590,12 @@ extension TPLinkClient {
             if plain {
                 result = try await post("/" + stokPath(p), body: body, contentType: json ? "application/json" : "application/x-www-form-urlencoded")
             } else if body.isEmpty {
-                let sign = try session.sign(seq: seq, login: false, hash: hash, nHex: signN, eHex: signE)
+                let sign = sg ? session.sgRequestSign(seq: seq, hash: TPCrypto.sha256Hex(""))
+                              : try session.sign(seq: seq, login: false, hash: hash, nHex: signN, eHex: signE)
                 result = try await post("/" + stokPath(p), body: "sign=\(sign)&data=")
             } else {
                 let enc = try session.encrypt(body)
-                let sign = try session.sign(seq: seq + enc.count, login: false, hash: hash, nHex: signN, eHex: signE)
+                let sign = try requestSign(enc)
                 result = try await post("/" + stokPath(p), body: "sign=\(sign)&data=\(Self.form(enc))")
             }
             let (d, r) = result
@@ -652,6 +676,9 @@ extension TPLinkClient {
     func diagnose(progress: @escaping (String) -> Void) async -> String {
         var out: [String] = []
         out.append("TP-Link at \(host)")
+        if let (d, _) = try? await post("/device_config?form=config", body: "operation=read") {
+            out.append("device_config: " + String(decoding: d.prefix(400), as: UTF8.self))
+        }
         progress("Trying both login names…")
         override = nil
         forceAdmin = false

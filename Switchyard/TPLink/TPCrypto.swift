@@ -172,6 +172,39 @@ enum TPCrypto {
         return hex(c.bytes(count: k))
     }
 
+    /// RSA with OAEP padding (SHA-1, MGF1-SHA-1, empty label), as newer TP-Link firmware signs logins.
+    static func rsaOAEP(_ message: [UInt8], nHex: String, eHex: String) throws -> String {
+        guard let n = BigUInt(hex: nHex), let e = BigUInt(hex: eHex), !n.isZero else { throw TPError.message("The router sent a bad key.") }
+        let k = (n.bitWidth + 7) / 8
+        let hLen = 20
+        guard message.count <= k - 2 * hLen - 2 else { throw TPError.message("Login signature too long for the router's key.") }
+        func sha1(_ b: [UInt8]) -> [UInt8] { Array(Insecure.SHA1.hash(data: Data(b))) }
+        func mgf1(_ seed: [UInt8], _ len: Int) -> [UInt8] {
+            var out: [UInt8] = []
+            var c: UInt32 = 0
+            while out.count < len {
+                out += sha1(seed + [UInt8(c >> 24 & 0xff), UInt8(c >> 16 & 0xff), UInt8(c >> 8 & 0xff), UInt8(c & 0xff)])
+                c += 1
+            }
+            return Array(out.prefix(len))
+        }
+        let lHash = sha1([])
+        let ps = [UInt8](repeating: 0, count: k - message.count - 2 * hLen - 2)
+        let db = lHash + ps + [1] + message
+        let seed = (0..<hLen).map { _ in UInt8.random(in: 0...255) }
+        let maskedDB = zip(db, mgf1(seed, k - hLen - 1)).map { $0 ^ $1 }
+        let maskedSeed = zip(seed, mgf1(maskedDB, hLen)).map { $0 ^ $1 }
+        let em = [0] + maskedSeed + maskedDB
+        let c = BigUInt(bytes: em).power(e, modulus: n)
+        return hex(c.bytes(count: k))
+    }
+
+    static func sha256Hex(_ s: String) -> String { hex(Array(SHA256.hash(data: Data(s.utf8)))) }
+
+    static func hmacSHA256Hex(key: String, _ s: String) -> String {
+        hex(Array(HMAC<SHA256>.authenticationCode(for: Data(s.utf8), using: SymmetricKey(data: Data(key.utf8)))))
+    }
+
     static func hex(_ b: [UInt8]) -> String { b.map { String(format: "%02x", $0) }.joined() }
 
     static func md5Hex(_ s: String) -> String {
@@ -198,6 +231,43 @@ struct TPSession {
         func r() -> String { TPCrypto.hex((0..<8).map { _ in UInt8.random(in: 0...255) }) }
         key = r()
         iv = r()
+    }
+
+    /// Newer firmware's web UI uses 16 random decimal digits for the key and IV.
+    init(digits: Bool) {
+        func r() -> String { String((0..<16).map { _ in Character(String(Int.random(in: 0...9))) }) }
+        if digits { key = r(); iv = r() } else {
+            func h() -> String { TPCrypto.hex((0..<8).map { _ in UInt8.random(in: 0...255) }) }
+            key = h(); iv = h()
+        }
+    }
+
+    /// Newer firmware login signature: RSA-OAEP over "k=&i=&h=&s=" in chunks that fit the key.
+    func sgLoginSign(seq: Int, hash: String, nHex: String, eHex: String) throws -> String {
+        let bytes = Array("k=\(key)&i=\(iv)&h=\(hash)&s=\(seq)".utf8)
+        let k = nHex.count / 2
+        let step = min(53, k - 42)
+        guard step > 0 else { throw TPError.message("The router's signing key is too small.") }
+        var out = ""
+        var pos = 0
+        while pos < bytes.count {
+            out += try TPCrypto.rsaOAEP(Array(bytes[pos..<min(pos + step, bytes.count)]), nHex: nHex, eHex: eHex)
+            pos += step
+        }
+        return out
+    }
+
+    /// Newer firmware request signature: HMAC-SHA256 (keyed with "k=&i=") over "h=&s=", 53 characters at a time.
+    func sgRequestSign(seq: Int, hash: String) -> String {
+        let s = Array("h=\(hash)&s=\(seq)")
+        let mac = "k=\(key)&i=\(iv)"
+        var out = ""
+        var pos = 0
+        while pos < s.count {
+            out += TPCrypto.hmacSHA256Hex(key: mac, String(s[pos..<min(pos + 53, s.count)]))
+            pos += 53
+        }
+        return out
     }
 
     func encrypt(_ s: String) throws -> String {
