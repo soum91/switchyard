@@ -20,6 +20,15 @@
       "screenshotURLs": [],
       "versions": [
         {
+          "version": "1.0.0.24",
+          "buildVersion": "24",
+          "date": "2026-11-11T01:43:11Z",
+          "localizedDescription": "- TP-Link: fewer login attempts per connect (avoid the router's lockout) (0295a1f)\n- docs: record factual changes for build-23 [skip ci] (5c779ca)",
+          "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-24/Switchyard-1.0.0-build-24.ipa",
+          "size": 953860,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "1.0.0.23",
           "buildVersion": "23",
           "date": "2026-11-11T01:21:05Z",
@@ -227,11 +236,11 @@
           "minOSVersion": "17.0"
         }
       ],
-      "version": "1.0.0.23",
-      "versionDate": "2026-11-11T01:21:05Z",
-      "versionDescription": "- TP-Link: support the newer signing scheme (SHA-256, RSA-OAEP login, HMAC-SHA256 requests) (f06c2ff)\n- docs: record factual changes for build-22 [skip ci] (d9ac0e1)",
-      "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-23/Switchyard-1.0.0-build-23.ipa",
-      "size": 953706,
+      "version": "1.0.0.24",
+      "versionDate": "2026-11-11T01:43:11Z",
+      "versionDescription": "- TP-Link: fewer login attempts per connect (avoid the router's lockout) (0295a1f)\n- docs: record factual changes for build-23 [skip ci] (5c779ca)",
+      "downloadURL": "https://github.com/soum91/switchyard/releases/download/build-24/Switchyard-1.0.0-build-24.ipa",
+      "size": 953860,
       "appPermissions": {}
     }
   ],
