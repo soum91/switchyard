@@ -111,6 +111,15 @@ final class TPLinkClient {
     /// request signature differs by firmware (empty in repeater mode, "admin" on Archers, or one you set),
     /// so each is tried until one gives a working session; the one that works is remembered.
     func login() async throws {
+        // Newer firmware (its key page reports a mode, e.g. the TL-WR1502X) is driven through its own page.
+        if bridge == nil, (try? await keys()) != nil, mode != nil {
+            bridge = TPWebBridge(host: host, password: password)
+        }
+        if let bridge {
+            try await bridge.login()
+            logged = true
+            return
+        }
         if let good = workingName {
             override = good
             try await loginOnce()
@@ -150,6 +159,9 @@ final class TPLinkClient {
         throw TPError.message("The TP-Link took the password but gave no working session. " + notes.joined(separator: "; "))
     }
     private var override: String?
+    /// Set for newer firmware: requests go through the router's own page (see TPWebBridge).
+    private var bridge: TPWebBridge?
+    var usesRouterPage: Bool { bridge != nil }
     /// Newer TP-Link signing (SHA-256 + OAEP login, HMAC-SHA256 requests).
     private(set) var sg = false
 
@@ -231,6 +243,8 @@ final class TPLinkClient {
 
     /// One API call, e.g. request("admin/status?form=all", "operation=read").
     func request(_ path: String, _ data: String) async throws -> Any {
+        if !logged { try await login() }
+        if let bridge { return try await bridge.call(path, data) }
         for attempt in 0..<2 {
             if !logged { try await login() }
             do {
@@ -306,7 +320,7 @@ final class TPLinkClient {
     private func stokPath(_ p: String) -> String { stok + "/" + p }
 
     func logout() async {
-        guard logged else { return }
+        guard logged, bridge == nil else { return }
         _ = try? await send("admin/system?form=logout", "operation=write")
         logged = false
     }
