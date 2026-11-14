@@ -1,5 +1,13 @@
 # Changelog
 
+## [build-27] - 2026-11-14
+
+## Verified changes since build-26
+
+- Devices: guess the maker from the MAC address, flag private Wi-Fi addresses, and add per-device nicknames ([`207f93c4`](https://github.com/soum91/switchyard/commit/207f93c4cf0556da8616e4b7377dbf0500a62e09); `Switchyard/App/DeviceNames.swift`, `Switchyard/Resources/oui.txt`, `Switchyard/Router/RouterModel.swift`, and 2 more)
+
+[Inspect exact code changes](https://github.com/soum91/switchyard/compare/build-26...build-27)
+
 ## [build-26] - 2026-11-11
 
 ## Verified changes since build-25
