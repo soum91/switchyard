@@ -4,14 +4,21 @@ import SwiftUI
 
 struct ClientsView: View {
     @ObservedObject var model: RouterModel
+    @ObservedObject private var names = DeviceNames.shared
     @State private var search = ""
+    @State private var renaming: String?
+
+    private func title(_ c: RClient) -> String { names.title(host: c.n, mac: c.m, ip: c.i) }
 
     private var online: [RClient] {
         let all = model.clients?.c ?? []
-        let f = search.isEmpty ? all : all.filter { ($0.n ?? "").localizedCaseInsensitiveContains(search) || ($0.i ?? "").contains(search) || $0.m.contains(search.lowercased()) }
+        let f = search.isEmpty ? all : all.filter {
+            title($0).localizedCaseInsensitiveContains(search) || ($0.n ?? "").localizedCaseInsensitiveContains(search)
+                || ($0.i ?? "").contains(search) || $0.m.contains(search.lowercased())
+        }
         return f.sorted { a, b in
             if a.wired != b.wired { return !a.wired }
-            return a.name.localizedCaseInsensitiveCompare(b.name) == .orderedAscending
+            return title(a).localizedCaseInsensitiveCompare(title(b)) == .orderedAscending
         }
     }
 
@@ -37,6 +44,7 @@ struct ClientsView: View {
         .refreshable { await model.loadClients() }
         .task { await model.loadClients() }
         .overlay(alignment: .bottom) { RouterToast(text: model.toast) }
+        .deviceRename($renaming)
     }
 
     private func row(_ c: RClient) -> some View {
@@ -46,12 +54,15 @@ struct ClientsView: View {
                 .foregroundStyle(c.blocked ? Theme.bad : Theme.accent)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
-                    Text(c.name).lineLimit(1)
+                    Text(title(c)).lineLimit(1)
                     if c.g == true { Text("GUEST").font(.caption2.weight(.bold)).foregroundStyle(.secondary) }
                     if c.blocked { Text("BLOCKED").font(.caption2.weight(.bold)).foregroundStyle(Theme.bad) }
                 }
                 Text([c.i, c.bandLabel, RFmt.linkRate(c.r)].compactMap { $0 }.joined(separator: " · "))
                     .font(.caption).foregroundStyle(.secondary)
+                if let note = names.note(host: c.n, mac: c.m) {
+                    Text(note).font(.caption2).foregroundStyle(.secondary).lineLimit(2)
+                }
                 Text(c.m.uppercased()).font(.caption2.monospaced()).foregroundStyle(.tertiary)
             }
             Spacer()
@@ -66,6 +77,7 @@ struct ClientsView: View {
             }
         }
         .contextMenu {
+            Button { renaming = c.m } label: { Label("Rename", systemImage: "pencil") }
             Button { UIPasteboard.general.string = c.m } label: { Label("Copy MAC address", systemImage: "doc.on.doc") }
             if let ip = c.i { Button { UIPasteboard.general.string = ip } label: { Label("Copy IP address", systemImage: "doc.on.doc") } }
         }

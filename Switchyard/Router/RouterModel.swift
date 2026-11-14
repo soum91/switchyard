@@ -131,12 +131,12 @@ final class RouterModel: ObservableObject {
     }
 
     func kick(_ c: RClient) async {
-        await run("c-" + c.m, "kick", ["mac": c.m], done: "\(c.name) kicked off Wi-Fi.")
+        await run("c-" + c.m, "kick", ["mac": c.m], done: "\(DeviceNames.shared.title(host: c.n, mac: c.m, ip: c.i)) kicked off Wi-Fi.")
         await loadClients()
     }
 
     func block(_ c: RClient, _ on: Bool) async {
-        await run("c-" + c.m, "block", ["mac": c.m, "on": on], done: on ? "\(c.name) has no internet now." : "\(c.name) is back online.")
+        await run("c-" + c.m, "block", ["mac": c.m, "on": on], done: on ? "\(DeviceNames.shared.title(host: c.n, mac: c.m, ip: c.i)) has no internet now." : "\(DeviceNames.shared.title(host: c.n, mac: c.m, ip: c.i)) is back online.")
         await loadClients()
     }
 

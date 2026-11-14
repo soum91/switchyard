@@ -88,6 +88,8 @@ struct TPLinkDashboard: View {
     @ObservedObject var model: TPLinkModel
     var onForget: () -> Void
     var onUseWeb: () -> Void = {}
+    @ObservedObject private var names = DeviceNames.shared
+    @State private var renaming: String?
     @State private var editing: TPWifi?
     @State private var confirmReboot = false
 
@@ -122,6 +124,7 @@ struct TPLinkDashboard: View {
         .navigationTitle(model.firmware?.model ?? "TP-Link")
         .refreshable { await model.refresh(); await model.loadWifi() }
         .overlay(alignment: .bottom) { RouterToast(text: model.toast) }
+        .deviceRename($renaming)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
@@ -224,7 +227,10 @@ struct TPLinkDashboard: View {
             ForEach(s.clients) { c in
                 HStack {
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(c.name.isEmpty ? c.ip : c.name).lineLimit(1)
+                        Text(names.title(host: c.name, mac: c.mac, ip: c.ip)).lineLimit(1)
+                        if let note = names.note(host: c.name, mac: c.mac) {
+                            Text(note).font(.caption2).foregroundStyle(.secondary).lineLimit(2)
+                        }
                         Text("\(c.ip) · \(c.mac)").font(.caption2.monospaced()).foregroundStyle(.secondary)
                     }
                     Spacer()
@@ -232,6 +238,10 @@ struct TPLinkDashboard: View {
                         Text(c.kind).font(.caption).foregroundStyle(.secondary)
                         if let sig = c.signal { Text("\(sig) dBm").font(.caption2.monospacedDigit()).foregroundStyle(.secondary) }
                     }
+                }
+                .contextMenu {
+                    Button { renaming = c.mac } label: { Label("Rename", systemImage: "pencil") }
+                    Button { UIPasteboard.general.string = c.mac } label: { Label("Copy MAC address", systemImage: "doc.on.doc") }
                 }
             }
             if s.clients.isEmpty { Text("Nothing connected.").foregroundStyle(.secondary) }
