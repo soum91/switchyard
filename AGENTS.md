@@ -43,3 +43,7 @@ Every diagnostic/log report requires Copy with clipboard read-back verification 
 ## Public attribution and owner privacy
 
 Use `soum91` as the author, maintainer, developer, and publisher in all first-party metadata. Do not publish the owner's legal name, private email, or other personal identifiers in source, licenses, Sileo/FlareStore feeds, release assets, binary packages, generated docs, logs, or commits. Audit generated artifacts before publishing. Preserve legitimate third-party copyright notices. Existing bundle identifiers, app groups, and entitlements must not be silently changed, because doing so can break upgrades and stored data.
+
+## Mandatory file picker / import policy (release-blocking)
+
+Every file picker, browser, import, export, signing or upload workflow in this repository **MUST** comply with [MANDATORY_FILE_PICKER.md](https://github.com/soum91/tweaks/blob/main/MANDATORY_FILE_PICKER.md). This covers future apps and all platforms. Files must be selectable with a real tap, return to the caller, copy safely to app-owned storage, complete the import and give visible success/error. Real-device end-to-end testing is required before claiming success. Merely opening Files or compiling is insufficient. Preserve existing project policies. Codex and Claude must propagate this rule to new app repositories.
